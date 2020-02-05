@@ -536,42 +536,6 @@ class World():
 			b.position = (b.position.x+self.gaussian_noise()*magnitude,
 				b.position.y+self.gaussian_noise()*magnitude)
 
-
-	def earthquake(self, obj, prob, noise, earthquake_type="full_circle"):
-		b = self.bodies[obj]
-		# If the ball has not yet exited
-		if b.position.x > 0:
-			# Randomly determine whether or not to quake 
-			if np.random.binomial(1,prob):
-				if earthquake_type == "full_circle":
-					# generate a random perturbation. Draw the direction from uniform 360 degrees
-					# Draw the magnitude from normal mean zero with given sd
-					theta = np.random.rand()*2*np.pi
-					mag = np.random.normal(scale=noise)
-					pert_x = mag*np.cos(theta)
-					pert_y = mag*np.sin(theta)
-
-					x = b.velocity[0]
-					y = b.velocity[1]
-
-					# set new velocity (noise is additive)
-					b.velocity = (x + pert_x, y + pert_y)
-
-				elif earthquake_type == "left":
-					# add a random perturbation to the target's direction
-					# change in angle is a random uniform draw from the full 360 degrees
-					theta = np.random.rand()*np.pi + (np.pi/2)
-					mag = np.random.exponential(scale=30)
-					new_x = mag*np.cos(theta)
-					new_y = mag*np.sin(theta)
-
-					x = b.velocity[0]
-					y = b.velocity[1]
-
-					# set new velocity
-					b.velocity = (x + new_x, y + new_y)
-
-
 	# step-wise noise
 	# use when there's a removed collision (represent uncertainty about where the ball would have gone)
 	# apply gaussian noise to velocity at each step
@@ -601,10 +565,6 @@ class World():
 	##################################################################
 
 ################ Model 1 for pragmatic judgement #################
-
-
-# cause_ball = 'A'
-# target_ball = 'B'
 
 
 # A procedure to determine which balls are downstream of a given ball in a 
@@ -646,59 +606,14 @@ def collision_chain(collisions, in_chain, start_time, reverse_time=False):
 		else:
 			return collision_chain(collisions[1:], in_chain, start_time, reverse_time=reverse_time)
 		
-# A test to determine the extent to which the candidate is a difference maker for the outcome
-# Takes a trial, candidate cause, target object, noise value, number of simulations
-# Returns a value between 0 and 1 indicating to what extent the candidate made a difference
-def difference_test(trial, candidate, target, noise, n_simulations, animate=False):
-	# Simulate the events
-	events = run_trial(trial, animate=animate)
-
-	# Determine the chain of collisions and the outcome
-	col_actual = events['collisions']
-	in_chain = {candidate}
-	noise_steps = collision_chain(col_actual, in_chain, -1)
-	outcome_actual = events['outcome_fine']
-
-	# Thought: In the old model we remove the target from the noise additions because
-	# if we add noise it will trivially satisfy the difference test.
-	# We consider this to be acceptable because even if the target was in the causal chain
-	# and we didn't add noise, the removal of the cause will affect its fine outcome so we
-	# haven't made a mistake. This seems redundant though? Because we know it is going to
-	# do the same thing it is acceptable to remove that and prove it. Why not just leave the
-	# test essentially satisfied by noise addition? Here I do so, but we can change it up if necessary
-
-	# Add removal manipulation and noise manipulations
-	info = []
-	info.append({
-		'action': 'remove',
-		'obj': candidate,
-		'step': 0
-		})
-
-	for item in noise_steps:
-		info.append({
-			'action': 'noise',
-			'obj': item[0],
-			'step': item[1] 
-		})
-
-	# Run n cf simulations and record the outcomes
-	outcomes = []
-	for i in range(n_simulations):
-		events_cf = run_trial(trial, animate=animate, noise=noise, info=info)
-		outcome_cf = events_cf['outcome_fine']
-		outcomes.append(outcome_actual != outcome_cf)
-
-	# If any are different, the candidate is a difference maker
-	return np.mean(outcomes)
-
+# Quick helper to extract the actual outcome of a trial
 def outcome(trial):
 	events = run_trial(trial=trial)
 	outcome = events["outcome"]
 	return outcome
 
 # Run the whether cf test on a trial given a trial, candidate cause, target entitiy,
-# asuncertainty noise value, and number of samples
+# uncertainty noise value, and number of samples
 # Return a value indicating the proportion of samples in which the candidate satisfied the whether
 # cause definition
 def whether_test(trial, candidate, target, noise, num_samples, animate=False, test_noise=False):
@@ -733,56 +648,17 @@ def whether_test(trial, candidate, target, noise, num_samples, animate=False, te
 		outcome_cf[i] = events_cf['outcome']
 
 
-	# If the actual outcome is different from the counterfactual one, return true
+	# Return portion of difference making events. Return testing info if desired
 	if not test_noise:
 		return np.mean(outcome_actual != outcome_cf)
 	else:
 		return np.mean(outcome_actual != outcome_cf), {'info': info}
 
 
-# An augmented whether test to account for pre-emption style cases
-# Ignores sufficient alternatives that were not difference makers
-def whether_test_augmented(trial, candidate, target, noise, num_samples, print_vals=False, just_difference=True):
-
-	# Determine the alternative set for the trial
-	alternatives = {b["name"] for b in trial["balls"]}
-	if "boxes" in trial: 
-		alternatives.add("box")
-	if "gate" in trial:
-		alternatives.add("gate")
-	alternatives = alternatives - {candidate, target}
-
-	# calculate the whether value of the candidate
-	wh_candidate = whether_test(trial, candidate, target, noise, num_samples)
-
-	# Calculate the sufficiency of the candidate
-	wh_augmented = sufficient_test(trial, candidate, target, noise, num_samples)
-
-	# calculate the sufficiency and difference making of all alternatives
-	# and multiply the sufficiency of the candidate by their product
-	test_outputs = {'wh_candidate': wh_candidate, "suff_candidate": wh_augmented}
-	for alt in alternatives:
-		dm_complement = 1 - difference_test(trial, alt, target, noise, num_samples)
-		if just_difference:
-			wh_augmented = wh_augmented*dm_complement
-		else:
-			suff_alt = sufficient_test(trial, alt, target, noise, num_samples)
-			wh_augmented = wh_augmented*dm_complement*suff_alt
-
-		if print_vals:
-			test_outputs[alt + "_dm_complement"] = dm_complement
-			if not just_difference:
-				test_outputs[alt + "_sufficiency"] = suff_alt
-
-	# Return the max of the base whether score and the augmented value
-	if not print_vals:
-		return max(wh_candidate, wh_augmented)
-	else:
-		return max(wh_candidate, wh_augmented), test_outputs
-
-
-
-
+# Computes the how test on a given trial, candidate cause, target entity,
+# for a perturb value and number of samples
+# Return a value representing the portion of samples in which the candidate
+# was a difference maker at fine granularity
 def how_test(trial, candidate, target, perturb, num_samples, animate=False):
 	events = run_trial(trial=trial, animate=animate)
 	x,y = events['outcome_fine']
@@ -804,12 +680,14 @@ def how_test(trial, candidate, target, perturb, num_samples, animate=False):
 		x,y = cf_events['outcome_fine']
 		outcome_cf[i,:] = [x,y]
 
-	# return true if the fine outcomes are different
-	return np.all(outcome_actual != outcome_cf, axis=1)
+	# return portion of cases that are difference makers
+	return np.mean(np.all(outcome_actual != outcome_cf, axis=1))
 
 
 # Computes the sufficiency test on a given trial, candidate, and target
 # for a noise value and number of samples
+# Optional to include the box and gate as alternatives
+# Optional also to test whether the cf events took place in the actual world (event_test)
 # Returns a value indicating the proportion of samples for which the candidate is
 # determined sufficient to make the target go through the gate
 def sufficient_test(trial, candidate, target, noise, num_samples, gate_alt=False, box_alt=True, animate=False, test_noise=False, event_test=True):
@@ -903,9 +781,6 @@ def sufficient_test(trial, candidate, target, noise, num_samples, gate_alt=False
 	info_cf_cont.append(manip)
 
 	# Run the counterfactuals and cf contingencies
-	# outcome_cf = np.zeros(num_samples)
-	# outcome_cf_cont = np.zeros(num_samples)
-
 	outcomes = np.zeros(num_samples)
 	for i in range(num_samples):
 		events_cf = run_trial(trial=trial, animate=animate, noise=noise, info=info_cf, cut_sim=True)
@@ -930,32 +805,11 @@ def sufficient_test(trial, candidate, target, noise, num_samples, gate_alt=False
 			collision_containment = [col in actual_collisions for col in cf_collisions]
 			bpress_containment = [press in actual_bpresses for press in cf_bpresses]
 
-			# Testing output
-			if False:
-				print('iteration', i)
-				print("Actual Collisions:")
-				print(actual_collisions)
-				print("Counterfactual Collisions:")
-				print(cf_collisions)
-				print()
-				print("Actual Button Presses:")
-				print(actual_bpresses)
-				print("Counterfactual Button Presses:")
-				print(cf_bpresses)
-				print()
-				print("collision containment:")
-				print(collision_containment)
-				print("button press containment:")
-				print(bpress_containment)
-				print()
-
-
-			containment = (all([col in actual_collisions for col in cf_collisions]) and
-				all([press in actual_bpresses for press in cf_bpresses]))
+			containment = all(collision_containment) and all(bpress_containment)
 
 			outcomes[i] = outcomes[i] and containment
 
-
+	# Return the proportion of sufficient outcomes and noise info if desired
 	if not test_noise:
 		return np.mean(outcomes)
 	else:
@@ -963,94 +817,12 @@ def sufficient_test(trial, candidate, target, noise, num_samples, gate_alt=False
 
 
 
-def robust_test(trial, candidate, target, noise, prob, earth_noise, num_samples, animate=False, test_noise=False, earthquake_type="full_circle", sampling_style="all_samps"):
-	events = run_trial(trial=trial, animate=False)
-
-	# Determine the chain of collisions and the outcome
-	col_actual = events['collisions']
-	in_chain = {candidate}
-	noise_steps = collision_chain(col_actual, in_chain, -1)
-	outcome_actual = events['outcome']
-
-
-	info_cf = []
-
-	cf_earthquake = {
-		'action': 'earthquake',
-		'obj': target,
-		'prob': prob,
-		'noise': earth_noise,
-		'earthquake_type': earthquake_type
-	}
-
-	info_cf.append(cf_earthquake)
-
-	info_cf_cont = []
-
-	rem = {
-		'action': 'remove',
-		'obj': candidate,
-		'step': 0
-	}
-	info_cf_cont.append(rem)
-
-	for item in noise_steps:
-		manip = {
-			'action': 'noise',
-			'obj': item[0],
-			'step': item[1]
-		}
-		info_cf.append(manip)
-		info_cf_cont.append(manip)
-
-	info_cf_cont.append(cf_earthquake)
-
-	num_outcome_with_cause = 0
-	num_outcome_without_cause = 0
-
-	outcome_array = np.zeros(num_samples)
-
-	i = 0
-	while i < num_samples:
-		events_cf = run_trial(trial=trial, animate=animate, noise=noise, prob=prob, info=info_cf)
-		outcome_cf = events_cf['outcome']
-
-		events_cf_cont = run_trial(trial=trial, animate=animate, noise=noise, prob=prob, info=info_cf_cont)
-		outcome_cf_cont = events_cf_cont['outcome']
-
-		if outcome_cf == outcome_actual and outcome_cf_cont != outcome_actual:
-			outcome_array[i] = 1.0
-		elif outcome_cf != outcome_actual and outcome_cf_cont == outcome_actual:
-			outcome_array[i] = -1.0
-
-		if sampling_style == "all_samps":
-			i += 1
-		elif sampling_style == "drop_zeros":
-			if outcome_array[i] != 0:
-				i += 1
-		else:
-			raise Exception("Sampling syle '{}' not implemented".format(sampling_style))
-
-	if not test_noise:
-		return np.mean(outcome_array)
-	else:
-		return np.mean(outcome_array), {'info_cf': info_cf, 'info_cf_cont': info_cf_cont}
-
-
-def robust_vals(trials, noise, prob, earth_noise, num_samples):
-	for i in range(len(trials)):
-		tr = trials[i]
-		v = sum(robust_test(tr, noise, prob, earth_noise, num_samples))
-		print("Trial " + str(i))
-		print(v)
-		print()
-
 # Procedure to test whether the candidate cause is stationary
 def moving_test(trial, candidate, target):
 	# Get the event and paths
 	events, paths = run_trial(trial=trial, rec_paths=True)
 	stationary = False
-	# For all collisions if the candidate and the target are in a collision
+	# For any collision if the candidate and the target are in a collision
 	# and the candidate's velocity is zero beforehand, then the candidate
 	# cause was stationary
 	for col in events["collisions"]:
@@ -1064,31 +836,15 @@ def moving_test(trial, candidate, target):
 
 
 
-	
-def aspect_rep(trial, candidate, target, noise=2, perturb=0.01, include_robust=False, prob=0.003, earth_noise=50, num_samples=100, whether_version='basic', gate_alt=False, box_alt=True, difference_making=False):
+# A procdedure to compute an aspect representation for a trial
+def aspect_rep(trial, candidate, target, noise=2, perturb=0.01, num_samples=100, gate_alt=False, box_alt=True):
 	o = outcome(trial)
-	d = difference_test(trial, candidate, target, noise, num_samples)
-	if whether_version == "basic":
-		w = whether_test(trial, candidate, target, noise, num_samples)
-	elif whether_version == "augmented":
-		w = whether_test_augmented(trial, candidate, target, noise, num_samples)
-	else:
-		raise Exception("whether version '{}' not implemented.".format(whether_version))
+	w = whether_test(trial, candidate, target, noise, num_samples)
 	h = float(how_test(trial, candidate, target, perturb, 1))
 	s = sufficient_test(trial, candidate, target, noise, num_samples, gate_alt=gate_alt, box_alt=box_alt)
 	st = moving_test(trial, candidate, target)
-	if include_robust:
-		r = np.mean(robust_test(trial, candidate, target, noise, prob, earth_noise, num_samples))
-	else:
-		r = float('nan')
 
-	if difference_making:
-		return [aspect*d for aspect in [w, h, s, r]] + [o, d, st]
-	else:
-		return [w, h, s, r, o, d, st]
-
-
-
+	return [w, h, s, st, o]
 
 
 # Given a trial dictionary, setup the world and simulate the trial
