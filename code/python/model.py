@@ -890,8 +890,6 @@ def viewers(trials, prior):
 
 	return cf, suff, anim
 
-def sum_square(a, b): return np.sum((a-b)**2)
-
 def load_trials(path):
 	with open(path) as f:
 		data_str = f.read()
