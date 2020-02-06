@@ -821,7 +821,7 @@ def sufficient_test(trial, candidate, target, noise, num_samples, gate_alt=False
 def moving_test(trial, candidate, target):
 	# Get the event and paths
 	events, paths = run_trial(trial=trial, rec_paths=True)
-	stationary = False
+	moving = 1
 	# For any collision if the candidate and the target are in a collision
 	# and the candidate's velocity is zero beforehand, then the candidate
 	# cause was stationary
@@ -830,9 +830,9 @@ def moving_test(trial, candidate, target):
 		if candidate in objects and target in objects:
 			candidate_vel = paths[candidate]['velocity']
 			if candidate_vel[col['step'] - 1] == [0.0, 0.0]:
-				stationary = True
+				moving = 0
 
-	return stationary
+	return moving
 
 
 
