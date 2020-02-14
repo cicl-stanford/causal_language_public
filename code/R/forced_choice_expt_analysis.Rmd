@@ -1,0 +1,590 @@
+---
+title: "clang_forced_choice2_analysis"
+author: "Erin Bennett and Ari Beller"
+date: "11/26/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  comment = "",
+  results = "hold",
+  fig.show = "hold")
+```
+
+# Load packages
+
+```{r load-packages, message=F}
+library("tidyverse")
+library("RSQLite")
+library("lubridate")
+library("rjson")
+library("tidyjson")
+library("jpeg")
+library("egg") # for geom_custom()
+library("grid")
+library("brms")
+```
+
+
+```{r set-theme}
+theme_set(
+  theme_classic() + 
+    theme(text = element_text(size = 24))
+)
+```
+
+# Read in data 
+
+```{r Read in all data from file}
+con = dbConnect(SQLite(), dbname = "../../data/full_database_anonymized.db");
+df_data = dbReadTable(con, "language")
+dbDisconnect(con)
+```
+
+```{r Filter to this study}
+# filter out incompletes 
+df_data = df_data %>%
+  filter(status %in% 3:5) %>%
+  # filter(!str_detect(uniqueid, "debug")) %>%
+  filter(codeversion %in% c("forced_choice_2"))
+```
+
+## Participants
+
+```{r Extract demographics}
+df_demographics = df_data$datastring %>% 
+  spread_values(
+    language = jstring("questiondata", "language"),
+    age = jstring("questiondata", "age"),
+    gender = jstring("questiondata", "gender"),
+    race = jstring("questiondata", "race"),
+    ethnicity = jstring("questiondata", "ethnicity"),
+    feedback = jstring("questiondata", "feedback")
+  ) %>% 
+  rename(participant = document.id) %>% 
+  mutate(time = difftime(df_data$endhit,df_data$beginhit,units = "mins"))
+```
+
+Age?
+
+```{r}
+df_demographics %>%
+  mutate(age = as.numeric(age)) %>%
+  summarise(
+    median(age, na.rm = TRUE),
+    sd(age, na.rm = TRUE)
+  )
+```
+
+
+Gender?
+
+```{r Gender}
+df_demographics %>%
+  mutate(
+    gender = str_replace(gender, "^[fF].*", "Female"),
+    gender = str_replace(gender, "^[mM].*", "Male"),
+    gender = str_replace(gender, "^$", NA_character_)
+  ) %>%
+  count(gender)
+```
+
+Native language?
+
+```{r Language}
+df_demographics %>%
+  mutate(
+    language = str_replace(language, "^[eE][nN][gG].*", "English"),
+    language = str_replace(language, "^$", NA_character_)
+  ) %>%
+  count(language)
+```
+
+How long did it take participants to do the task?
+
+```{r Time taken}
+df_demographics %>%
+  summarise(mean(time, na.rm = TRUE))
+```
+
+## Extract data
+
+```{r Extract main data}
+df_long = df_data$datastring %>% 
+  as.tbl_json() %>% 
+  enter_object("data") %>%
+  gather_array("order") %>% 
+  enter_object("trialdata") %>% 
+  gather_object("index") %>% 
+  append_values_string("value") %>% 
+  as_tibble() %>% 
+  rename(participant = document.id) %>% 
+  spread(index, value) %>% 
+  rename(trial = id) %>% 
+  mutate_at(vars(trial, time), ~ as.numeric(.)) %>% 
+  mutate(time = time / 1000) %>% 
+  select(participant, trial, description, response, time) %>% 
+  arrange(participant, trial)
+```
+
+```{r Check for and label participants to exclude}
+df_long = df_long %>%
+  mutate(is_attention_check = trial == 30)
+excluded_participants = df_long %>%
+  filter(response != "no_difference" & is_attention_check) %>%
+  .$participant
+df_long_filtered = df_long %>%
+  filter(!(participant %in% excluded_participants))
+df_long = df_long %>%
+  mutate(is_excluded_participant = participant %in% excluded_participants)
+c(num_excluded_participants = length(excluded_participants))
+```
+
+```{r Filter out excluded participants}
+df_long = df_long %>% filter(!is_excluded_participant)
+```
+
+
+## Aggregate data
+
+```{r Create dataframe with responses aggregated over participants}
+df_agg = df_long %>%
+  # ignore attention check and instruction video
+  filter(trial != 30,
+         trial != 31,
+         !is_excluded_participant) %>% 
+  # aggregate over participants
+  group_by(trial, description, response) %>%
+  summarise(count = length(response)) %>%   
+  ungroup()
+
+# TODO figure out the function for this
+#handle cells where no participant gave that response
+df_agg = right_join(df_agg, expand(df_agg, trial, response)) %>%
+  group_by(trial) %>%
+  mutate(description = description[!is.na(description)][1]) %>%
+  ungroup() %>%
+  mutate(count = ifelse(is.na(count), 0, count))
+
+df_agg = df_agg %>%
+  group_by(trial, description) %>%
+  mutate(data_y = count / sum(count)) %>%
+  ungroup() %>%
+  select(trial, description, response, data_y) %>%
+  mutate(trial = as.integer(trial),
+         description = as.factor(description))
+```
+
+# Load and Combine Model
+
+```{r load model}
+df_model = read.csv("../python/forced_choice_expt_rsa.csv") %>%
+  # relabel responses to match experiment
+  mutate(response = recode(
+    utterance,
+    caused = "cause",
+    `didn't affect` = "no_difference",
+    affected = "affect",
+    enabled = "enable"
+  )) %>%
+  select(-utterance) %>%
+  rename(model_y = p) %>%
+  select(-X) %>%
+  mutate(model_label = paste(
+    paste("affected:", affected_version, sep=""),
+    paste("caused:", caused_version, sep=""),
+    paste("enabled:", enabled_version, sep=""),
+    paste("notaffected:", not_affect_version, sep=""),
+    paste("uncertainty_noise:",uncertainty_noise, sep=""),
+    paste("speaker_opt:", speaker_optimality, sep=""),
+    paste("box_alternative:", box_alternative, sep=""),
+    paste("lesion_rsa:", lesion_rsa, sep=""),
+    paste("beta:", beta, sep=""),
+    paste("stationary_softener:", stationary_softener, sep=""),
+    paste("how_not_affect_param:", how_not_affect_param, sep = ""),
+    sep=" ~ ")) %>%
+  mutate(model_label_multiline = paste(
+    paste("affected:", affected_version, sep=""),
+    paste("caused:", caused_version, sep=""),
+    paste("enabled:", enabled_version, sep=""),
+    paste("notaffected:", not_affect_version, sep=""),
+    paste("uncertainty_noise:",uncertainty_noise, sep=""),
+    paste("speaker_opt:", speaker_optimality, sep=""),
+    paste("box_alternative:", box_alternative, sep=""),
+    paste("lesion_rsa:", lesion_rsa, sep=""),
+    paste("beta:", beta, sep=""),
+    paste("how_not_affect_param:", how_not_affect_param, sep = ""),
+    sep="\n"))
+```
+
+```{r Combine model and data}
+model_v_data_wide = merge(
+  df_agg %>%
+    filter(trial != 31, trial != 30),
+  df_model %>%
+    filter(trial != 31, trial != 30),
+  all=T) %>%
+  mutate(data_y = ifelse(is.na(data_y), 0, data_y)) %>%
+  mutate(error = model_y - data_y)
+```
+
+```{r Using sum sq error to choose best models}
+# num_participants
+vocab = unique(model_v_data_wide$response)
+model_errors = suppressWarnings(
+  model_v_data_wide %>%
+    group_by(lesion_rsa, not_affect_version, caused_version, model_label, trial) %>%
+    summarise(sum_sq_error = sum((error)^2)) %>%
+  group_by(lesion_rsa, not_affect_version, caused_version, model_label) %>%
+    summarise(sum_sq_error = sum(sum_sq_error)) %>%
+  arrange(sum_sq_error))
+```
+
+```{r select semantics models, fig.width=15, fig.height=5}
+best_model_labels = model_errors %>%
+  # filter(not_affect_version != "not((how and param) or whether or sufficient)") %>%
+  # filter(caused_version %in% c("and_h_or_ws", "and_h_st_or_ws")) %>%
+  group_by(lesion_rsa) %>%
+  summarise(model_label = model_label[[1]]) %>%
+  ungroup() %>%
+  pull(model_label)
+best_models = model_v_data_wide %>%
+  filter(model_label %in% best_model_labels) %>%
+  mutate(model_label_short = if_else(lesion_rsa == "1", "No Pragmatics", "Full Model"))
+```
+
+```{r}
+best_model_labels
+```
+
+## Bayesian Ordinal Regression
+
+### Multiple predictors
+```{r Wrangle data for regression}
+df_aspects = model_v_data_wide %>% 
+  filter(uncertainty_noise == 1.4) %>% 
+  select(trial, whether, how, sufficient, moving) %>%
+  unique() %>%
+  arrange(trial)
+
+df_aspects_data = df_long %>%
+  filter(!is_attention_check,
+         !is_excluded_participant) %>% 
+  left_join(df_aspects, by = c("trial")) %>% 
+  select(participant, trial, response, whether, how, sufficient, moving) %>%
+  mutate(response = factor(response, levels = c("no_difference", "affect", "enable", "cause"), ordered = TRUE))
+```
+
+```{r Ordinal regression}
+# # Commented out because it takes a long time to run
+# reg = brm(formula = response ~ whether + how + sufficient + moving,
+#           data = df_aspects_data,
+#           family = "cumulative",
+#           # file = "regression/ord_reg_flip_stationary",
+#           seed = 1)
+# # Commented out because it takes a long time to run
+# reg = brm(formula = response ~ whether + how + moving,
+#           data = df_aspects_data,
+#           family = "cumulative",
+#           file = "regression/ord_reg_flip_stationary",
+#           seed = 1)
+```
+
+```{r Compare-the-regression-predictions-to-the-data}
+reg = readRDS("regression/ord_reg_no_stationary_noise_1.6.rds")
+
+set.seed(1)
+
+mat_reg_pred = predict(reg, newdata = df_aspects)
+
+df_reg_pred = as.data.frame(predict(reg, newdata = df_aspects)) %>% 
+  rename(no_difference = "P(Y = 1)",
+         affect = "P(Y = 2)",
+         enable = "P(Y = 3)",
+         cause = "P(Y = 4)") %>% 
+  mutate(trial = seq(0,29)) %>% 
+  gather(key = response, value = model_y, -trial) %>% 
+  arrange(trial, response) %>%
+  left_join(df_agg, by = c("trial", "response")) %>% 
+  select(-description) %>% 
+  mutate(error = model_y - data_y)
+```
+
+# Best Models
+```{r}
+best_models_all = best_models %>%
+  select(trial, response, data_y, model_y, model_label_short) %>%
+  rbind(
+    df_reg_pred %>%
+      mutate(model_label_short = "Ordinal Regression") %>%
+      select(trial, response, data_y, model_y, model_label_short)
+  )
+```
+
+
+```{r summarize-model-statistics}
+best_models_all %>%
+  group_by(model_label_short) %>% 
+  summarise(R = cor(model_y, data_y), RMSE = Metrics::rmse(model_y, data_y))
+
+```
+
+## Plots
+
+```{r sample cases}
+sample_cases = c(12, 18, 2, 22, 6, 7, 14, 15)
+words = c("no_difference", "affect", "enable", "cause")
+labels = c("N", "A", "E", "C")
+df.plot = df_agg %>%
+  filter(trial %in% sample_cases) %>%
+  mutate(trial = factor(trial, levels = sample_cases),
+         Clip = factor(trial, labels = 1:length(sample_cases)),
+         response = factor(response,
+                           levels = words,
+                           labels = labels))
+df.model = best_models_all %>% 
+  filter(trial %in% sample_cases) %>%
+  mutate(Model = model_label_short,
+         trial = factor(trial, levels = sample_cases),
+         Clip = factor(trial, labels = 1:length(sample_cases)),
+         response = factor(response,
+                           levels = words,
+                           labels = labels))
+func_load_image = function(clip){
+  readJPEG(str_c("../../figures/forced_choice_expt_diagrams/trial", clip, ".jpeg"))
+}
+df.clips = df.plot %>% 
+  distinct(trial, Clip) %>% 
+  arrange(Clip) %>% 
+  mutate(grob = map(.x = trial, .f = ~ func_load_image(clip = .x)))
+p = ggplot(data = df.plot,
+           mapping = aes(x = response, y = data_y)) +
+  geom_bar(stat = "identity",
+           fill = "lightgray",
+           color = "black") +
+  geom_point(data = df.model,
+             mapping = aes(x = response,
+                           y = model_y,
+                           shape = Model,
+                           fill = Model),
+             size = 3,
+             position = position_dodge(0.8),
+             color = "black") +
+  geom_custom(data = df.clips,
+              mapping = aes(data = grob, x = 2.5, y = Inf),
+              grob_fun = function(x) rasterGrob(x,
+                                                interpolate = T,
+                                                vjust = -0.3)) +
+  facet_wrap(~Clip,
+             ncol = length(sample_cases),
+             labeller = "label_both") +
+  scale_fill_brewer(type = "qual", palette = 6, name = "") +
+  scale_shape_manual(name = "",
+                     values = 21:23) + 
+  labs(y = "Proportion of\nResponses",
+       caption = "N: no difference, A: affected, E: enabled, C: caused") +
+  coord_cartesian(clip = "off") + 
+  theme(legend.text.align = 0,
+        panel.grid = element_blank(),
+        legend.position = "bottom",
+        axis.title.x = element_blank(),
+        legend.text = element_text(size = 24),
+        plot.caption = element_text(size = 20, color = "gray20"),
+        plot.margin = margin(t = 6, l = 0.2, r = 0.2, b = 0.1, unit = "cm")) +
+  guides(fill = guide_legend(override.aes = list(size = 6)))
+
+
+ggsave("../../figures/paper_plots/cogsci_bar_model_cases.pdf",
+       width = 20,
+       height = 6)
+```
+
+```{r scatter, fig.width=15, fig.height=5}
+df.plot = best_models_all %>%
+  rename(Model = model_label_short) %>% 
+  mutate(response = factor(response,
+                           levels = c("no_difference", "affect", "enable", "cause"),
+                           labels = c("no difference", "affected", "enabled", "caused")))
+
+df.text = df.plot %>% 
+  group_by(Model) %>% 
+  summarize(r = cor(data_y, model_y),
+            RMSE = sqrt(mean((data_y - model_y)^2))) %>% 
+  ungroup() %>% 
+  pivot_longer(cols = -Model) %>% 
+  mutate_if(is.numeric, ~ round(., 2)) %>% 
+  mutate(data_y = rep(c(0.9, 1), 3),
+         model_y = 0,
+         label = str_c(name, " = ", value),
+         label = ifelse(name == "r", 
+                        str_replace(label, "0.", "."),
+                        label))
+
+ggplot(data = df.plot,
+       mapping = aes(x = model_y,
+                     y = data_y)) +
+  geom_smooth(method = "lm",
+              se = F,
+              color = "black",
+              show.legend = F) +
+  geom_text(data = df.text,
+            mapping = aes(label = label),
+            hjust = 0,
+            size = 8) + 
+  geom_point(mapping = aes(fill = response,
+                           shape = response),
+             alpha = 0.8,
+             size = 4) +
+  facet_grid(cols = vars(Model)) +
+  scale_shape_manual(values = 21:24) + 
+  labs(x = "Model Prediction",
+       y = "Proportion of Responses") +
+  theme(legend.position = "bottom",
+        panel.spacing.x = unit(1, "cm"),
+        legend.text = element_text(size = 24),
+        strip.text = element_text(size = 24)) +
+  guides(fill = guide_legend(title = "response: "),
+         shape = guide_legend(title = "response: "))
+
+ggsave("../../figures/paper_plots/cogsci_scatter.pdf",
+       width = 20,
+       height = 6)
+```
+
+## Tables
+
+```{r}
+sample_cases_aspects <-
+  model_v_data_wide %>%
+  filter(
+    model_label %in% best_model_labels,
+    lesion_rsa == "0"
+  ) %>%
+  filter(trial %in% sample_cases[1:4]) %>%
+  mutate(trial = factor(trial, levels = sample_cases[1:4])) %>%
+  group_by(trial, how, whether, sufficient) %>%
+  summarise() %>%
+  ungroup() %>%
+  # .[c(1, 2, 4, 3),] %>%
+  select(trial, whether, how, sufficient) %>%
+  # mutate(sufficient = c(1, 1, whether[3], 0)) %>%
+  mutate(clip = 1L:n())
+sample_cases_aspects
+
+# vars = c(
+#   "Whether" = "whether",
+#   "How" = "how",
+#   "Sufficient" = "sufficient"
+# )
+# tabl = "Clip & 1 & 2 & 3 & 4 \\\\ \n \\midrule \n"
+# for (v in names(vars)) {
+#   tabl = str_c(tabl, v)
+#   for (i in 1:4) {
+#     tabl = str_c(tabl, " & ", sprintf("%.2f", sample_cases_aspects[i, vars[v]]))
+#   }
+#   tabl = str_c(tabl, " \\\\ \n")
+# }
+# writeLines(tabl)
+```
+
+```{r}
+how_param <- 0.2
+sample_cases_semantics <-
+  sample_cases_aspects %>%
+  transmute(
+    trial,
+    enable = whether + sufficient - whether*sufficient,
+    cause = how*(enable),
+    affect = how,
+    whether_or_suff = enable,
+    how_and_flip = how * how_param,
+    something_true_how_soft = whether_or_suff + how_and_flip - whether_or_suff*how_and_flip,
+    no_diff = 1 - (something_true_how_soft)
+    # not_whether_or_sufficient =
+    #   (1-whether) + (1-sufficient) - (1-whether)*(1-sufficient),
+    # no_diff =
+    #   (not_whether_or_sufficient + (1-how) - (1-how)*not_whether_or_sufficient)
+      
+  ) %>%
+  select(trial, cause, enable, affect, no_diff)
+sample_cases_semantics
+
+# vars = c(
+#   "No Difference" = "no_diff",
+#   "Affected" = "affect",
+#   "Enabled" = "enable",
+#   "Caused" = "cause"
+# )
+# tabl = "Clip & 1 & 2 & 3 & 4 \\\\ \n \\midrule \n"
+# for (v in names(vars)) {
+#   tabl = str_c(tabl, v)
+#   for (i in 1:4) {
+#     tabl = str_c(tabl, " & ", sprintf("%.2f", sample_cases_semantics[i, vars[v]]))
+#   }
+#   tabl = str_c(tabl, " \\\\ \n")
+# }
+# writeLines(tabl)
+```
+
+```{r}
+sample_cases_l0 <-
+  sample_cases_semantics %>%
+  mutate_at(vars(cause, enable, affect, no_diff), ~ . / sum(.))
+sample_cases_l0
+
+# vars = c(
+#   "No Difference" = "no_diff",
+#   "Affected" = "affect",
+#   "Enabled" = "enable",
+#   "Caused" = "cause"
+# )
+# tabl = "Clip & 1 & 2 & 3 & 4 \\\\ \n \\midrule \n"
+# for (v in names(vars)) {
+#   tabl = str_c(tabl, v)
+#   for (i in 1:4) {
+#     tabl = str_c(tabl, " & ", sprintf("%.2f", sample_cases_l0[i, vars[v]]))
+#   }
+#   tabl = str_c(tabl, " \\\\ \n")
+# }
+# writeLines(tabl)
+```
+
+```{r}
+sample_cases_s1 <-
+  sample_cases_l0 %>%
+  mutate(
+    z = cause + enable + affect + no_diff,
+    cause = cause / z,
+    enable = enable / z,
+    affect = affect / z,
+    no_diff = no_diff / z
+)
+sample_cases_s1
+
+for (i in 1:4) {
+  writeLines(str_c(
+    i, " & ",
+    sprintf("%.2f", sample_cases_s1[i, "no_diff"]), " & ",
+    sprintf("%.2f", sample_cases_s1[i, "affect"]), " & ",
+    sprintf("%.2f", sample_cases_s1[i, "enable"]), " & ",
+    sprintf("%.2f", sample_cases_s1[i, "cause"]), " \\\\ "
+  ))
+}
+
+# vars = c(
+#   "No Difference" = "no_diff",
+#   "Affected" = "affect",
+#   "Enabled" = "enable",
+#   "Caused" = "cause"
+# )
+# tabl = "Clip & 1 & 2 & 3 & 4 \\\\ \n \\midrule \n"
+# for (v in names(vars)) {
+#   tabl = str_c(tabl, v)
+#   for (i in 1:4) {
+#     tabl = str_c(tabl, " & ", sprintf("%.2f", sample_cases_s1[i, vars[v]]))
+#   }
+#   tabl = str_c(tabl, " \\\\ \n")
+# }
+# writeLines(tabl)
+```

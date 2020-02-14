@@ -177,7 +177,7 @@ for how_not_affect_param in [0.2]:
           for not_affect_version in ["not((how and param) or whether or sufficient)"]:
 
             # for uncertainty_noise in [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6]:
-            for uncertainty_noise in [1.5]:
+            for uncertainty_noise in [1.4, 1.5, 1.6]:
 
               for box_alternative in [0]:
 
@@ -218,35 +218,35 @@ for how_not_affect_param in [0.2]:
                             "beta": beta
                           })
 
-                    # if not lesion_rsa:
-                    else:
-                      for speaker_optimality in [2]:
-                            
-                        s2_output = s2()
+                  # if not lesion_rsa:
+                  else:
+                    for speaker_optimality in [2]:
+                          
+                      s2_output = s2()
 
-                        for u, utterance in enumerate(vocabulary):
-                          for c in range(trial_max):
-                            data.append({
-                              "speaker_optimality": speaker_optimality,
-                              "caused_version": caused_version,
-                              "affected_version": affected_version,
-                              "enabled_version": enabled_version,
-                              "utterance": utterance,
-                              "trial": c,
-                              "uncertainty_noise": uncertainty_noise,
-                              "level": "s2",
-                              "p": s2_output[u, c],
-                              "whether": clips_aspect_values[c,w],
-                              "how": clips_aspect_values[c,h],
-                              "sufficient": clips_aspect_values[c,s],
-                              "moving": clips_aspect_values[c,m],
-                              "not_affect_version": not_affect_version,
-                              "box_alternative": box_alternative,
-                              "lesion_rsa": lesion_rsa,
-                              "stationary_softener": stationary_softener,
-                              "how_not_affect_param": how_not_affect_param,
-                              "beta": np.nan
-                            })
+                      for u, utterance in enumerate(vocabulary):
+                        for c in range(trial_max):
+                          data.append({
+                            "speaker_optimality": speaker_optimality,
+                            "caused_version": caused_version,
+                            "affected_version": affected_version,
+                            "enabled_version": enabled_version,
+                            "utterance": utterance,
+                            "trial": c,
+                            "uncertainty_noise": uncertainty_noise,
+                            "level": "s2",
+                            "p": s2_output[u, c],
+                            "whether": clips_aspect_values[c,w],
+                            "how": clips_aspect_values[c,h],
+                            "sufficient": clips_aspect_values[c,s],
+                            "moving": clips_aspect_values[c,m],
+                            "not_affect_version": not_affect_version,
+                            "box_alternative": box_alternative,
+                            "lesion_rsa": lesion_rsa,
+                            "stationary_softener": stationary_softener,
+                            "how_not_affect_param": how_not_affect_param,
+                            "beta": np.nan
+                          })
 
 
 
