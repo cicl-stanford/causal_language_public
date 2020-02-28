@@ -181,7 +181,7 @@ for how_not_affect_param in [0.2]:
 
               for box_alternative in [0]:
 
-                clips_data = json.load(open("aspects/experiment_trials_samples_1000__uncertainty_noise_{}__gate_alternative_0__box_alternative_{}_vector_representation.json".format(uncertainty_noise, box_alternative)))
+                clips_data = json.load(open("aspects_paper/experiment_trials_samples_1000__uncertainty_noise_{}__gate_alternative_0__box_alternative_{}_vector_representation.json".format(uncertainty_noise, box_alternative)))
 
                 clips_aspect_values = np.array([tr['rep'] for tr in clips_data])
 
