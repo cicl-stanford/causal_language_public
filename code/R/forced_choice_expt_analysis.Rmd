@@ -12,7 +12,22 @@ knitr::opts_chunk$set(
   fig.show = "hold")
 ```
 
-# Load packages
+# (Install) and load packages
+
+If necessary, uncomment the following lines and run this code block to install packages:
+
+```{r install packages}
+# Uncomment the following lines to install required packages
+# install.packages("tidyverse")
+# install.packages("RSQLite")
+# install.packages("lubridate")
+# install.packages("rjson")
+# install.packages("tidyjson")
+# install.packages("jpeg")
+# install.packages("egg") # for geom_custom()
+# install.packages("grid")
+# install.packages("brms")
+```
 
 ```{r load-packages, message=F}
 library("tidyverse")
@@ -25,7 +40,6 @@ library("egg") # for geom_custom()
 library("grid")
 library("brms")
 ```
-
 
 ```{r set-theme}
 theme_set(
@@ -230,7 +244,6 @@ model_v_data_wide = merge(
 ```
 
 ```{r Using sum sq error to choose best models}
-# num_participants
 vocab = unique(model_v_data_wide$response)
 model_errors = suppressWarnings(
   model_v_data_wide %>%
@@ -239,23 +252,10 @@ model_errors = suppressWarnings(
   group_by(lesion_rsa, not_affect_version, caused_version, model_label) %>%
     summarise(sum_sq_error = sum(sum_sq_error)) %>%
   arrange(sum_sq_error))
-```
-
-```{r select semantics models, fig.width=15, fig.height=5}
-best_model_labels = model_errors %>%
-  # filter(not_affect_version != "not((how and param) or whether or sufficient)") %>%
-  # filter(caused_version %in% c("and_h_or_ws", "and_h_st_or_ws")) %>%
-  group_by(lesion_rsa) %>%
-  summarise(model_label = model_label[[1]]) %>%
-  ungroup() %>%
-  pull(model_label)
-best_models = model_v_data_wide %>%
-  filter(model_label %in% best_model_labels) %>%
-  mutate(model_label_short = if_else(lesion_rsa == "1", "No Pragmatics", "Full Model"))
-```
-
-```{r}
-best_model_labels
+model_errors_with_movement = model_errors %>%
+  filter(caused_version == "and_hm_or_ws")
+model_errors = model_errors %>%
+  filter(caused_version == "and_h_or_ws")
 ```
 
 ## Bayesian Ordinal Regression
@@ -278,16 +278,19 @@ df_aspects_data = df_long %>%
 
 ```{r Ordinal regression}
 # # Commented out because it takes a long time to run
-# reg = brm(formula = response ~ whether + how + sufficient + moving,
-#           data = df_aspects_data,
-#           family = "cumulative",
-#           # file = "regression/ord_reg_flip_stationary",
-#           seed = 1)
-# # Commented out because it takes a long time to run
 # reg = brm(formula = response ~ whether + how + moving,
 #           data = df_aspects_data,
 #           family = "cumulative",
 #           file = "regression/ord_reg_flip_stationary",
+#           seed = 1)
+```
+
+```{r Ordinal regression with movement feature}
+# # Commented out because it takes a long time to run
+# reg_with_movement = brm(formula = response ~ whether + how + sufficient + moving,
+#           data = df_aspects_data,
+#           family = "cumulative",
+#           file = "regression/ord_reg_no_stationary",
 #           seed = 1)
 ```
 
@@ -299,10 +302,10 @@ set.seed(1)
 mat_reg_pred = predict(reg, newdata = df_aspects)
 
 df_reg_pred = as.data.frame(predict(reg, newdata = df_aspects)) %>% 
-  rename(no_difference = "P(Y = 1)",
-         affect = "P(Y = 2)",
-         enable = "P(Y = 3)",
-         cause = "P(Y = 4)") %>% 
+  rename(no_difference = "P(Y = no_difference)",
+         affect = "P(Y = affect)",
+         enable = "P(Y = enable)",
+         cause = "P(Y = cause)") %>% 
   mutate(trial = seq(0,29)) %>% 
   gather(key = response, value = model_y, -trial) %>% 
   arrange(trial, response) %>%
@@ -312,6 +315,24 @@ df_reg_pred = as.data.frame(predict(reg, newdata = df_aspects)) %>%
 ```
 
 # Best Models
+
+## Without movement feature
+
+```{r select semantics models, fig.width=15, fig.height=5}
+best_model_labels = model_errors %>%
+  group_by(lesion_rsa) %>%
+  summarise(model_label = model_label[[1]]) %>%
+  ungroup() %>%
+  pull(model_label)
+best_models = model_v_data_wide %>%
+  filter(model_label %in% best_model_labels) %>%
+  mutate(model_label_short = if_else(lesion_rsa == "1", "No Pragmatics", "Full Model"))
+```
+
+```{r}
+best_model_labels
+```
+
 ```{r}
 best_models_all = best_models %>%
   select(trial, response, data_y, model_y, model_label_short) %>%
@@ -322,7 +343,6 @@ best_models_all = best_models %>%
   )
 ```
 
-
 ```{r summarize-model-statistics}
 best_models_all %>%
   group_by(model_label_short) %>% 
@@ -330,7 +350,7 @@ best_models_all %>%
 
 ```
 
-## Plots
+### Plots
 
 ```{r sample cases}
 sample_cases = c(12, 18, 2, 22, 6, 7, 14, 15)
@@ -393,7 +413,7 @@ p = ggplot(data = df.plot,
         plot.caption = element_text(size = 20, color = "gray20"),
         plot.margin = margin(t = 6, l = 0.2, r = 0.2, b = 0.1, unit = "cm")) +
   guides(fill = guide_legend(override.aes = list(size = 6)))
-
+p
 
 ggsave("../../figures/paper_plots/cogsci_bar_model_cases.pdf",
        width = 20,
@@ -452,7 +472,7 @@ ggsave("../../figures/paper_plots/cogsci_scatter.pdf",
        height = 6)
 ```
 
-## Tables
+### Tables
 
 ```{r}
 sample_cases_aspects <-
@@ -587,4 +607,67 @@ for (i in 1:4) {
 #   tabl = str_c(tabl, " \\\\ \n")
 # }
 # writeLines(tabl)
+```
+
+## With movement feature
+
+```{r Compare-the-regression-predictions-to-the-data with movement feature}
+reg_with_movement = readRDS("regression/ord_reg_noise_1.6.rds")
+
+set.seed(1)
+
+mat_reg_pred_with_movement =
+  predict(
+    reg_with_movement,
+    newdata = df_aspects %>% mutate(stationary = 1 - moving)
+  )
+
+df_reg_pred_with_movement =
+  as.data.frame(
+    predict(
+      reg_with_movement,
+      newdata = df_aspects %>% mutate(stationary = 1 - moving)
+    )
+  ) %>% 
+  rename(no_difference = "P(Y = no_difference)",
+         affect = "P(Y = affect)",
+         enable = "P(Y = enable)",
+         cause = "P(Y = cause)") %>% 
+  mutate(trial = seq(0,29)) %>% 
+  gather(key = response, value = model_y, -trial) %>% 
+  arrange(trial, response) %>%
+  left_join(df_agg, by = c("trial", "response")) %>% 
+  select(-description) %>% 
+  mutate(error = model_y - data_y)
+```
+
+```{r select semantics models with movement feature, fig.width=15, fig.height=5}
+best_model_labels_with_movement = model_errors_with_movement %>%
+  group_by(lesion_rsa) %>%
+  summarise(model_label = model_label[[1]]) %>%
+  ungroup() %>%
+  pull(model_label)
+best_models_with_movement = model_v_data_wide %>%
+  filter(model_label %in% best_model_labels_with_movement) %>%
+  mutate(model_label_short = if_else(lesion_rsa == "1", "No Pragmatics", "Full Model"))
+```
+
+```{r}
+best_model_labels_with_movement
+```
+
+```{r}
+best_models_all_with_movement = best_models_with_movement %>%
+  select(trial, response, data_y, model_y, model_label_short) %>%
+  rbind(
+    df_reg_pred_with_movement %>%
+      mutate(model_label_short = "Ordinal Regression") %>%
+      select(trial, response, data_y, model_y, model_label_short)
+  )
+```
+
+```{r summarize-model-statistics with movement feature}
+best_models_all_with_movement %>%
+  group_by(model_label_short) %>% 
+  summarise(R = cor(model_y, data_y), RMSE = Metrics::rmse(model_y, data_y))
 ```

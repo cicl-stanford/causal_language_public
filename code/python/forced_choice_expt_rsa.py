@@ -1,17 +1,8 @@
-"""
-python enumerate_causal_rsa.py --n_samples 1000 --prior_type all
-python enumerate_causal_rsa.py --n_samples 1000 --prior_type target_only
-"""
-
 import numpy as np
 import json
 import argparse
 from sys import exit
 import pandas as pd
-
-
-trial_max = 32
-
 
 vocabulary = ["caused", "enabled", "affected", "didn't affect"]
 
@@ -28,16 +19,8 @@ vocabulary = ["caused", "enabled", "affected", "didn't affect"]
 # """
 w, h, s, m, o = (0, 1, 2, 3, 4)
 
-
-# clips_data = json.load(open("aspects/experiment_trials_samples_1000__uncertainty_noise_{}__gate_alternative_0__box_alternative_{}_vector_representation.json".format(1.0, 0)))
-
-# clips_aspect_values = np.array([tr['rep'] for tr in clips_data])
-
-# caused_version = "and_hm_or_ws"
-# stationary_softener = 0.5
-# how_not_affect_param = 0.2
-# speaker_optimality = 2
-
+# Which trials to consider as part of the prior
+trial_max = 32
 
 def meaning(utterance):
   if utterance == "enabled":
@@ -162,10 +145,14 @@ def softmax(arr, ax, beta=1):
 
 data = []
 
+# PARAM SEARCH: to fit parameters, uncomment the following line:
 # for how_not_affect_param in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
+# PARAM SEARCH: to fit parameters, comment the following line:
 for how_not_affect_param in [0.2]:
 
+  # PARAM SEARCH: to fit parameters, uncomment the following line:
   # for stationary_softener in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
+  # PARAM SEARCH: to fit parameters, comment the following line:
   for stationary_softener in [0.7]:
 
     for enabled_version in ["or_ws"]:
@@ -176,7 +163,9 @@ for how_not_affect_param in [0.2]:
 
           for not_affect_version in ["not((how and param) or whether or sufficient)"]:
 
+            # PARAM SEARCH: to fit parameters, uncomment the following line:
             # for uncertainty_noise in [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6]:
+            # PARAM SEARCH: to fit parameters, comment the following line:
             for uncertainty_noise in [1.4, 1.5, 1.6]:
 
               for box_alternative in [0]:
@@ -218,7 +207,6 @@ for how_not_affect_param in [0.2]:
                             "beta": beta
                           })
 
-                  # if not lesion_rsa:
                   else:
                     for speaker_optimality in [2]:
                           
@@ -247,11 +235,5 @@ for how_not_affect_param in [0.2]:
                             "how_not_affect_param": how_not_affect_param,
                             "beta": np.nan
                           })
-
-
-
-
-
-
 
 pd.DataFrame(data).to_csv("forced_choice_expt_rsa.csv")

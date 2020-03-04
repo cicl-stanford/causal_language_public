@@ -51,6 +51,8 @@ def generate_aspects(trials_file, representation_file):
 
 start = time.time()
 input_file = args.i
+if not os.path.isdir("aspects/"):
+	os.mkdir("aspects/")
 output_file = "aspects/" + os.path.basename(input_file)[:-5] + "_" + argstring + "_vector_representation.json"
 generate_aspects(input_file, output_file)
 print('Runtime:', time.time() - start)
