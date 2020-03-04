@@ -20,13 +20,13 @@ pip:
 
 1. Generate aspects. This runs the whether, how, and sufficiency tests accross samples of counterfactual simulations. Output will be saved to `code/python/aspects/`. Note that the generated aspects from the paper are already included in this repo in `code/python/aspects_paper`.
 
-    cd code/python/
-    python aspect_generator.py --i trialinfo/experiment_trials.json --samples 1000 --uncertainty_noise 1.5
+        cd code/python/
+        python aspect_generator.py --i trialinfo/experiment_trials.json --samples 1000 --uncertainty_noise 1.5
 
 2. Run RSA pragmatics model. Note the parameters are set to the optimal ones found in the paper. To fit model parameters, change the lines commented with "PARAM SEARCH"
 
-    cd code/python/
-    python forced_choice_expt_rsa.py
+        cd code/python/
+        python forced_choice_expt_rsa.py
 
 3. In RStudio, install packages as needed and then knit `forced_choice_expt_analysis.Rmd` to remake all plots and compute reported statistics.
 
