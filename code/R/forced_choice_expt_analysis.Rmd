@@ -2,14 +2,16 @@
 title: "clang_forced_choice2_analysis"
 author: "Erin Bennett and Ari Beller"
 date: "11/26/2019"
-output: html_document
+output: github_document
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(
   comment = "",
   results = "hold",
-  fig.show = "hold")
+  fig.show = "hold",
+  echo = FALSE
+)
 ```
 
 # (Install) and load packages
@@ -281,7 +283,7 @@ df_aspects_data = df_long %>%
 # reg = brm(formula = response ~ whether + how + moving,
 #           data = df_aspects_data,
 #           family = "cumulative",
-#           file = "regression/ord_reg_flip_stationary",
+#           file = "regression/ord_reg_no_flip_stationary",
 #           seed = 1)
 ```
 

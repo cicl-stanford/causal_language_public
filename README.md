@@ -2,34 +2,6 @@
 
 This is code for Beller et al. (submitted).
 
-## Dependencies
-
-* R
-* RStudio
-* python
-
-conda:
-
-* 
-
-pip:
-
-* 
-
-## Reproduce paper results
-
-1. Generate aspects. This runs the whether, how, and sufficiency tests accross samples of counterfactual simulations. Output will be saved to `code/python/aspects/`. Note that the generated aspects from the paper are already included in this repo in `code/python/aspects_paper`.
-
-        cd code/python/
-        python aspect_generator.py --i trialinfo/experiment_trials.json --samples 1000 --uncertainty_noise 1.5
-
-2. Run RSA pragmatics model. Note the parameters are set to the optimal ones found in the paper. To fit model parameters, change the lines commented with "PARAM SEARCH"
-
-        cd code/python/
-        python forced_choice_expt_rsa.py
-
-3. In RStudio, install packages as needed and then knit `forced_choice_expt_analysis.Rmd` to remake all plots and compute reported statistics.
-
 ## Tour through the Model
 
 ### Physics Engine Code
@@ -41,12 +13,11 @@ Example
 
 Start an interactive window:
 
-	(testenv) Aris-MacBook-Pro-2:python aribeller$ python
-	Python 3.7.2 (default, Dec 29 2018, 00:00:04) 
-	[Clang 4.0.1 (tags/RELEASE_401/final)] :: Anaconda, Inc. on darwin
-	Type "help", "copyright", "credits" or "license" for more information.
-	>>> import model as m
+	python
 
+Load model:
+
+	>>> import model as m
 
 Run a Simulation:
 
@@ -68,7 +39,7 @@ Can flip the animate tag to True if you wish observe the test. See model.py file
 
 To generate the aspect representations for the model you can use the aspect_generator.py script.
 
-	(testenv) Aris-MacBook-Pro-2:python aribeller$ python aspect_generator.py --i trialinfo/experiment_trials.json --samples 100 --uncertainty_noise 1.0
+	python aspect_generator.py --i trialinfo/experiment_trials.json --samples 100 --uncertainty_noise 1.0
 
 Example lists the input file, sample number, and uncertainty noise value. To list the arguments to the script, use the -h flag.
 
@@ -79,6 +50,39 @@ Aspect files are written into the aspects folder. Aspect files used for values i
 
 With the aspect representations for the clips we can produce model predictions by running the semantics and pragmatics. forced_choice_expt_rsa.py runs the semantics/pragmatics for the model parameters that we report in the paper. You can add other parameter choices by modifying the multi-level for loop. Runtime (and size of the output file) will grow exponentially with the number of parameters. The output is saved in forced_choice_expt_rsa.csv.
 
-	(testenv) Aris-MacBook-Pro-2:python aribeller$ python forced_choice_expt_rsa.py
+	python forced_choice_expt_rsa.py
 
 forced_choice_expt_rsa.py generates predictions for the full model and the lesioned RSA model. The predictions for the Bayesian Ordnial Regression are generated in the analysis file.
+
+
+## Reproduce paper results
+
+1. Install depdenencies
+
+* R
+* RStudio
+* python
+
+conda:
+
+* 
+
+pip:
+
+* 
+
+1. Generate aspects. This runs the whether, how, and sufficiency tests accross samples of counterfactual simulations. Output will be saved to `code/python/aspects/`. Note that the generated aspects from the paper are already included in this repo in `code/python/aspects_paper`.
+
+        cd code/python/
+        python aspect_generator.py --i trialinfo/experiment_trials.json --samples 1000 --uncertainty_noise 1.5
+
+2. Run RSA pragmatics model. Note the parameters are set to the optimal ones found in the paper. To fit model parameters, change the lines commented with "PARAM SEARCH"
+
+        cd code/python/
+        python forced_choice_expt_rsa.py
+
+3. In RStudio, install packages as needed and then knit `forced_choice_expt_analysis.Rmd` to remake all plots and compute reported statistics.
+
+## Run experiment
+
+
