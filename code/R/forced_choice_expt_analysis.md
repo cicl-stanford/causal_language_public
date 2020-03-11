@@ -31,15 +31,21 @@ Data is stored in
 
 ## Participants
 
+Age:
+
 | Median age | Age standard deviation |
 | ---------: | ---------------------: |
 |         34 |               8.256416 |
+
+Gender:
 
 | gender      | Count |
 | :---------- | ----: |
 | Female      |    19 |
 | Male        |    44 |
 | No response |     3 |
+
+Language:
 
 | language    | Count |
 | :---------- | ----: |
@@ -71,13 +77,13 @@ Regression results are in the directory
 
 # Best Models
 
-## Without movement feature
+## With movement feature
 
 | model\_label\_short |         R |      RMSE |
 | :------------------ | --------: | --------: |
-| Full Model          | 0.8629673 | 0.1475821 |
-| No Pragmatics       | 0.8063111 | 0.1573542 |
-| Ordinal Regression  | 0.6258472 | 0.2072770 |
+| Full Model          | 0.8854853 | 0.1376269 |
+| No Pragmatics       | 0.8098447 | 0.1560154 |
+| Ordinal Regression  | 0.6683447 | 0.1976832 |
 
 ### Plots
 
@@ -121,17 +127,17 @@ Literal listener:
 
 Speaker:
 
-| trial | cause | enable |    affect |  no\_diff |         z |
-| :---: | ----: | -----: | --------: | --------: | --------: |
-|  12   |   0.5 |   0.25 | 0.2500000 | 0.0000000 | 2.0000000 |
-|  18   |   0.0 |   1.00 | 0.0000000 | 0.0000000 | 0.5000000 |
-|   2   |   0.0 |   0.00 | 0.5294118 | 0.4705882 | 0.9444444 |
-|  22   |   0.0 |   0.00 | 0.0000000 | 1.0000000 | 0.5555556 |
+| trial | cause | enable |    affect |  no\_diff |
+| :---: | ----: | -----: | --------: | --------: |
+|  12   |   0.5 |   0.25 | 0.2500000 | 0.0000000 |
+|  18   |   0.0 |   1.00 | 0.0000000 | 0.0000000 |
+|   2   |   0.0 |   0.00 | 0.5294118 | 0.4705882 |
+|  22   |   0.0 |   0.00 | 0.0000000 | 1.0000000 |
 
-## With movement feature
+## Without movement feature
 
 | model\_label\_short |         R |      RMSE |
 | :------------------ | --------: | --------: |
-| Full Model          | 0.8854853 | 0.1376269 |
-| No Pragmatics       | 0.8098447 | 0.1560154 |
-| Ordinal Regression  | 0.4559851 | 0.2548990 |
+| Full Model          | 0.8629673 | 0.1475821 |
+| No Pragmatics       | 0.8063111 | 0.1573542 |
+| Ordinal Regression  | 0.6258472 | 0.2072770 |

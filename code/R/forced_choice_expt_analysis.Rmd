@@ -92,6 +92,8 @@ df_demographics = df_data$datastring %>%
   mutate(time = difftime(df_data$endhit,df_data$beginhit,units = "mins"))
 ```
 
+Age:
+
 ```{r}
 df_demographics %>%
   mutate(age = as.numeric(age)) %>%
@@ -101,6 +103,8 @@ df_demographics %>%
   ) %>%
   knitr::kable()
 ```
+
+Gender:
 
 ```{r Gender}
 df_demographics %>%
@@ -113,6 +117,8 @@ df_demographics %>%
   mutate(gender = recode(gender, .missing = "No response")) %>%
   knitr::kable()
 ```
+
+Language:
 
 ```{r Language}
 df_demographics %>%
@@ -268,10 +274,10 @@ model_errors = suppressWarnings(
   group_by(lesion_rsa, not_affect_version, caused_version, model_label) %>%
     summarise(sum_sq_error = sum(sum_sq_error)) %>%
   arrange(sum_sq_error))
-model_errors_with_movement = model_errors %>%
-  filter(caused_version == "and_hm_or_ws")
-model_errors = model_errors %>%
+model_errors_without_movement = model_errors %>%
   filter(caused_version == "and_h_or_ws")
+model_errors = model_errors %>%
+  filter(caused_version == "and_hm_or_ws")
 ```
 
 ## Bayesian Ordinal Regression
@@ -311,14 +317,24 @@ df_aspects_data = df_long %>%
 #           seed = 1)
 ```
 
-```{r Compare-the-regression-predictions-to-the-data}
-reg = readRDS("regression/ord_reg_no_stationary_noise_1.6.rds")
+```{r Compare-the-regression-predictions-to-the-data with movement feature}
+reg = readRDS("regression/ord_reg_noise_1.6.rds")
 
 set.seed(1)
 
-mat_reg_pred = predict(reg, newdata = df_aspects)
+mat_reg_pred =
+  predict(
+    reg,
+    newdata = df_aspects %>% mutate(stationary = moving)
+  )
 
-df_reg_pred = as.data.frame(predict(reg, newdata = df_aspects)) %>% 
+df_reg_pred =
+  as.data.frame(
+    predict(
+      reg,
+      newdata = df_aspects %>% mutate(stationary = moving)
+    )
+  ) %>% 
   rename(no_difference = "P(Y = no_difference)",
          affect = "P(Y = affect)",
          enable = "P(Y = enable)",
@@ -333,7 +349,7 @@ df_reg_pred = as.data.frame(predict(reg, newdata = df_aspects)) %>%
 
 # Best Models
 
-## Without movement feature
+## With movement feature
 
 ```{r select semantics models, fig.width=15, fig.height=5}
 best_model_labels = model_errors %>%
@@ -611,6 +627,7 @@ sample_cases_s1 <-
     no_diff = no_diff / z
 )
 sample_cases_s1 %>%
+  select(-z) %>%
   knitr::kable()
 
 # for (i in 1:4) {
@@ -640,26 +657,18 @@ sample_cases_s1 %>%
 # writeLines(tabl)
 ```
 
-## With movement feature
+## Without movement feature
 
-```{r Compare-the-regression-predictions-to-the-data with movement feature}
-reg_with_movement = readRDS("regression/ord_reg_noise_1.6.rds")
+
+
+```{r Compare-the-regression-predictions-to-the-data without movement feature}
+reg_without_movement = readRDS("regression/ord_reg_no_stationary_noise_1.6.rds")
 
 set.seed(1)
 
-mat_reg_pred_with_movement =
-  predict(
-    reg_with_movement,
-    newdata = df_aspects %>% mutate(stationary = 1 - moving)
-  )
+mat_reg_pred_without_movement = predict(reg_without_movement, newdata = df_aspects)
 
-df_reg_pred_with_movement =
-  as.data.frame(
-    predict(
-      reg_with_movement,
-      newdata = df_aspects %>% mutate(stationary = 1 - moving)
-    )
-  ) %>% 
+df_reg_pred_without_movement = as.data.frame(predict(reg_without_movement, newdata = df_aspects)) %>% 
   rename(no_difference = "P(Y = no_difference)",
          affect = "P(Y = affect)",
          enable = "P(Y = enable)",
@@ -673,32 +682,32 @@ df_reg_pred_with_movement =
 ```
 
 ```{r select semantics models with movement feature, fig.width=15, fig.height=5}
-best_model_labels_with_movement = model_errors_with_movement %>%
+best_model_labels_without_movement = model_errors_without_movement %>%
   group_by(lesion_rsa) %>%
   summarise(model_label = model_label[[1]]) %>%
   ungroup() %>%
   pull(model_label)
-best_models_with_movement = model_v_data_wide %>%
-  filter(model_label %in% best_model_labels_with_movement) %>%
+best_models_without_movement = model_v_data_wide %>%
+  filter(model_label %in% best_model_labels_without_movement) %>%
   mutate(model_label_short = if_else(lesion_rsa == "1", "No Pragmatics", "Full Model"))
 ```
 
 ```{r}
-# best_model_labels_with_movement
+# best_model_labels_without_movement
 ```
 
 ```{r}
-best_models_all_with_movement = best_models_with_movement %>%
+best_models_all_without_movement = best_models_without_movement %>%
   select(trial, response, data_y, model_y, model_label_short) %>%
   rbind(
-    df_reg_pred_with_movement %>%
+    df_reg_pred_without_movement %>%
       mutate(model_label_short = "Ordinal Regression") %>%
       select(trial, response, data_y, model_y, model_label_short)
   )
 ```
 
 ```{r summarize-model-statistics with movement feature}
-best_models_all_with_movement %>%
+best_models_all_without_movement %>%
   group_by(model_label_short) %>% 
   summarise(R = cor(model_y, data_y), RMSE = Metrics::rmse(model_y, data_y)) %>%
   knitr::kable()
