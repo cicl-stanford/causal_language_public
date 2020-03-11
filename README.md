@@ -2,6 +2,37 @@
 
 This is code for Beller et al. (submitted).
 
+## Reproduce paper results
+
+1. Install depdenencies
+
+* R
+* RStudio
+* python
+
+conda:
+
+* numpy
+* pandas
+* scipy
+
+pip:
+
+* pygame==1.9.6
+* pymunk
+
+1. Generate aspects. This runs the whether, how, and sufficiency tests accross samples of counterfactual simulations. Output will be saved to `code/python/aspects/`. Note that the generated aspects from the paper are already included in this repo in `code/python/aspects_paper`.
+
+        cd code/python/
+        python aspect_generator.py --i trialinfo/experiment_trials.json --samples 1000 --uncertainty_noise 1.5
+
+2. Run RSA pragmatics model. Note the parameters are set to the optimal ones found in the paper. To fit model parameters, change the lines commented with "PARAM SEARCH"
+
+        cd code/python/
+        python forced_choice_expt_rsa.py
+
+3. In RStudio, install packages as needed and then knit `forced_choice_expt_analysis.Rmd` to remake all plots and compute reported statistics. The compiled file `forced_choice_expt_analysis.md` contains all findings reported in the paper.
+
 ## Tour through the Model
 
 ### Physics Engine Code
@@ -32,6 +63,7 @@ Run a Counterfactual Test:
 
 	>>> m.whether_test(test_trial, candidate="A", target="B", noise=1.0, num_samples=100, animate=False)
 	1.0
+
 Can flip the animate tag to True if you wish observe the test. See model.py file for other counterfactual tests and parameters.
 
 
@@ -53,35 +85,6 @@ With the aspect representations for the clips we can produce model predictions b
 	python forced_choice_expt_rsa.py
 
 forced_choice_expt_rsa.py generates predictions for the full model and the lesioned RSA model. The predictions for the Bayesian Ordnial Regression are generated in the analysis file.
-
-
-## Reproduce paper results
-
-1. Install depdenencies
-
-* R
-* RStudio
-* python
-
-conda:
-
-* 
-
-pip:
-
-* 
-
-1. Generate aspects. This runs the whether, how, and sufficiency tests accross samples of counterfactual simulations. Output will be saved to `code/python/aspects/`. Note that the generated aspects from the paper are already included in this repo in `code/python/aspects_paper`.
-
-        cd code/python/
-        python aspect_generator.py --i trialinfo/experiment_trials.json --samples 1000 --uncertainty_noise 1.5
-
-2. Run RSA pragmatics model. Note the parameters are set to the optimal ones found in the paper. To fit model parameters, change the lines commented with "PARAM SEARCH"
-
-        cd code/python/
-        python forced_choice_expt_rsa.py
-
-3. In RStudio, install packages as needed and then knit `forced_choice_expt_analysis.Rmd` to remake all plots and compute reported statistics.
 
 ## Run experiment
 
