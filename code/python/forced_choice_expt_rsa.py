@@ -148,12 +148,12 @@ data = []
 # PARAM SEARCH: to fit parameters, uncomment the following line:
 # for how_not_affect_param in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
 # PARAM SEARCH: to fit parameters, comment the following line:
-for how_not_affect_param in [0.2]:
+for how_not_affect_param in [0.2, 0.5]:
 
   # PARAM SEARCH: to fit parameters, uncomment the following line:
   # for stationary_softener in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]:
   # PARAM SEARCH: to fit parameters, comment the following line:
-  for stationary_softener in [0.7]:
+  for stationary_softener in [0.4, 0.7]:
 
     for enabled_version in ["or_ws"]:
 
@@ -166,7 +166,7 @@ for how_not_affect_param in [0.2]:
             # PARAM SEARCH: to fit parameters, uncomment the following line:
             # for uncertainty_noise in [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6]:
             # PARAM SEARCH: to fit parameters, comment the following line:
-            for uncertainty_noise in [1.4, 1.5, 1.6]:
+            for uncertainty_noise in [1.0, 1.4, 1.5, 1.6]:
 
               for box_alternative in [0]:
 
@@ -208,7 +208,7 @@ for how_not_affect_param in [0.2]:
                           })
 
                   else:
-                    for speaker_optimality in [2]:
+                    for speaker_optimality in [1.25, 2]:
                           
                       s2_output = s2()
 

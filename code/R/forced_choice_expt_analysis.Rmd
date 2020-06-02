@@ -302,10 +302,10 @@ set.seed(1)
 mat_reg_pred = predict(reg, newdata = df_aspects)
 
 df_reg_pred = as.data.frame(predict(reg, newdata = df_aspects)) %>% 
-  rename(no_difference = "P(Y = no_difference)",
-         affect = "P(Y = affect)",
-         enable = "P(Y = enable)",
-         cause = "P(Y = cause)") %>% 
+  rename(no_difference = "P(Y = 1)",
+         affect = "P(Y = 2)",
+         enable = "P(Y = 3)",
+         cause = "P(Y = 4)") %>% 
   mutate(trial = seq(0,29)) %>% 
   gather(key = response, value = model_y, -trial) %>% 
   arrange(trial, response) %>%
@@ -626,13 +626,13 @@ df_reg_pred_with_movement =
   as.data.frame(
     predict(
       reg_with_movement,
-      newdata = df_aspects %>% mutate(stationary = 1 - moving)
+      newdata = df_aspects %>% mutate(stationary = moving)
     )
   ) %>% 
-  rename(no_difference = "P(Y = no_difference)",
-         affect = "P(Y = affect)",
-         enable = "P(Y = enable)",
-         cause = "P(Y = cause)") %>% 
+  rename(no_difference = "P(Y = 1)",
+         affect = "P(Y = 2)",
+         enable = "P(Y = 3)",
+         cause = "P(Y = 4)") %>% 
   mutate(trial = seq(0,29)) %>% 
   gather(key = response, value = model_y, -trial) %>% 
   arrange(trial, response) %>%
