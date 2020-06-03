@@ -11,9 +11,8 @@ from pymunk import Vec2d
 import collections #for keeping the order in which dictionaries were created
 import time
 import pandas as pd
-from scipy.optimize import minimize_scalar
-from scipy.stats import linregress
 import os
+from collections import defaultdict
 
 # WARNING: Pygame and Pymunk have reverse labeling conventions along the Y axis.
 # For pymunk the top is higher values and for pygame the top is lower values
@@ -88,22 +87,21 @@ class World():
 		self.space.add(wall)
 		return wall
 
+
+	# Separate code to setup and run animation if desired
 	def animation_setup(self):
 		# animation setup
 		pygame.init()
 		self.clock = pygame.time.Clock()
 		self.screen = pygame.display.set_mode((self.width, self.height))
 		pygame.display.set_caption("Animation")
-		self.pic_count = 0 # used for saving images
+		self.pic_count = 0 # used for saving images 
 
-		# Save the image for each body in a dictionary. Skip over sensors which are
-		# invisible and do not have sprites
 		for bname in self.bodies:
 			if 'sensor' not in bname:
 				sprite = pygame.image.load(os.path.join(self.img_dir, 'figures/' + bname + '.png'))
 				self.sprites[bname] = sprite
 
-	# Runs one step of animation
 	def animation_step(self, save, save_dir="", save_frames=[]):
 		# quit conditions
 		for event in pygame.event.get():
@@ -115,8 +113,7 @@ class World():
 
 		if len(save_frames)==0 or self.pic_count in save_frames:
 
-			# draw background, walls, exit and bodies
-			# background and exit come first so bodies will be superimposed on top
+			# draw screen, bacground and bodies
 			self.screen.fill((255,255,255)) #background
 			if not self.gate:
 				pygame.draw.rect(self.screen, pygame.color.THECOLORS['red'], [0,200,20,200])
@@ -162,9 +159,7 @@ class World():
 				pygame.image.save(self.screen, os.path.join(save_dir, 'animation'+'{:03}'.format(self.pic_count)+'.png'))
 		self.pic_count += 1
 
-	# General function to run the simulation
-	# Returns the events dictionary or events dictionary and the set of paths depending on value
-	# of rec_paths
+	# Procedure to run simulation. Returns events dict or events dict and path info dependent on the value of rec_paths
 	def simulate(self, animate=False, noise=0, perturb=0, prob=0, save=False, rec_paths=False, info=[], img_dir="", save_dir="", save_frames=[], cut_sim=False):
 		self.img_dir = img_dir
 
@@ -186,7 +181,6 @@ class World():
 				self.animation_step(save, save_dir, save_frames)
 
 			# cf manipulations 
-			# if len(info) != 0:
 			for action in info:
 				if action['action'] == 'remove':
 					self.remove(obj=action['obj'], step=action['step'], animate=animate)
@@ -227,7 +221,7 @@ class World():
 		else:
 			return self.events, paths
 
-	# Initialize ball. Place it in the space. Note it in the shape and body dicts
+	# Procedure to add a ball
 	def add_ball(self, position, velocity, size, name):
 		mass = 1
 		radius = size/2
@@ -248,7 +242,7 @@ class World():
 		self.shapes[name] = shape
 		return body, shape
 
-	# Initialize box. Place in space. Record in shape and body dicts
+	# Procedure to add a box. Velocity update is modified within
 	def add_box(self, position, size, angle, name):
 		mass = 1
 		moment = pymunk.moment_for_box(mass, size)
@@ -267,18 +261,20 @@ class World():
 		body.name = name
 		shape = pymunk.Poly.create_box(body, size)
 		shape.elasticity = 1.0
+		# I don't think this friction parameter has desired effect
+		# worth further investigation
+		# shape.friction = 1.0
 		shape.collision_type = self.collision_types['dynamic']
 		self.space.add(body, shape)
 		self.bodies[name] = body
 		self.shapes[name] = shape
 		return body, shape
 
-	# Initialize button
+	# Procedure to add a button based on starting button position (top or bottom)
+	# anda a starting gate position
+	# Also adds the corresponding sensor to stop the button
 	def add_button(self, pos, gate_pos):
 		body = pymunk.Body(body_type=pymunk.Body.KINEMATIC)
-		# set starting position
-		# Starting position for a button depends on where the gate starts
-		# e.g. if the gate starts at top, the top button must already be pressed back
 		if pos == 'top':
 			if gate_pos == 'top':
 				body.position = (10, 486.675)
@@ -296,22 +292,20 @@ class World():
 		shape = pymunk.Poly.create_box(body, body.size)
 		shape.elasticity = 1.0
 		shape.collision_type = self.collision_types['button']
-		# Add to space, record in body and shape dicts
 		self.space.add(body, shape)
 		self.bodies[body.name] = body
 		self.shapes[body.name] = shape
-
-		# For either sensor, put a wall behind to stop its backward movement
-		# and an invisible sensor in front to stop its forward movement
 		if pos == 'top':
+			# self.add_sensor((-10,486.675), 'top_back_sensor', 'button')
 			self.add_wall(position=(-10, 486.675), length=20, height=30, name='top_button_stopper')
 			self.add_sensor((40, 486.675), 'top_front_sensor', 'button')
 		elif pos == 'bottom':
+			# self.add_sensor((-10,113.335), 'bottom_back_sensor', 'button')
 			self.add_wall(position=(-10, 113.335), length=20, height=30, name='bottom_button_stopper')
 			self.add_sensor((40,113.335), 'bottom_front_sensor', 'button')
 		return body, shape
 
-	# Initialize a sensor for stopping either a button or the gate
+	# Add a sensor
 	def add_sensor(self, pos, name, stop_obj):
 		body = pymunk.Body(body_type=pymunk.Body.STATIC)
 		body.position = pos
@@ -319,7 +313,6 @@ class World():
 		body.size = (20, 20)
 		body.angle = 0
 		shape = pymunk.Poly.create_box(body=body, size=body.size)
-		# Set its collision type based on the stop object
 		if stop_obj == 'button':
 			shape.collision_type = self.collision_types['button_sensor']
 		elif stop_obj == 'gate':
@@ -330,10 +323,10 @@ class World():
 		self.shapes[body.name] = shape
 		return body, shape
 
-	# Add the gate
+	# Add the gate given a starting position. If the gate is added
+	# buttons and and stopping sensors will be added as well.
 	def add_gate(self, start_pos):
 		body = pymunk.Body(body_type=pymunk.Body.KINEMATIC)
-		# Choose its starting position based on instruction
 		if start_pos == 'middle':
 			body.position = (30, 300)
 		elif start_pos == 'top':
@@ -352,11 +345,8 @@ class World():
 		self.bodies['gate'] = body
 		self.shapes['gate'] = shape
 
-		# Save the gate attribute for use by the overarching world object
 		self.gate = body
 
-		# If we add the gate, we need to add the activation buttons and also
-		# stop sensors for when the gate returns to middle position from top or bottom
 		self.add_button('top', start_pos)
 		self.add_button('bottom', start_pos)
 		self.add_sensor((30, 402), 'gate_top_sensor', 'gate')
@@ -368,9 +358,7 @@ class World():
 	    """Small hack to convert chipmunk physics to pygame coordinates"""
 	    return -y+600
 
-	# A procedure to re-draw the image of a dynamic body at each step
-	# of animation
-	# No return item
+	# Code to update the object image on the screen
 	def update_sprite(self,body,sprite,screen):
 		p = body.position
 		p = Vec2d(p.x, self.flipy(p.y))
@@ -407,7 +395,7 @@ class World():
 		handler_gate_sensor = self.space.add_collision_handler(self.collision_types['gate'], self.collision_types['gate_sensor'])
 		handler_gate_sensor.begin = self.gate_sensor_col
 
-	# handle dynamic events. Specifically for two dynamic objects
+	# handle dynamic events
 	def collisions(self,arbiter,space,data):
 		# print arbiter.is_first_contact #checks whether it was the first contact between the shapes 
 		event = {
@@ -417,7 +405,7 @@ class World():
 		self.events['collisions'].append(event)
 		return True
 
-	# handle dynamic events. For dynamic objects and a wall
+	# handle dynamic events
 	def ball_other_col(self,arbiter,space,data):
 		# print arbiter.is_first_contact #checks whether it was the first contact between the shapes 
 		event = {
@@ -427,7 +415,8 @@ class World():
 		self.events['wall_bounces'].append(event)
 		return True
 
-	# handle ball (or box) button collisions
+	# Handle collisions between buttons and balls. Record events and 
+	# Set the button and gate in motion.
 	def ball_button_col(self, arbiter, space, data):
 		event = {
 			'objects': {arbiter.shapes[0].body.name, arbiter.shapes[1].body.name},
@@ -435,8 +424,6 @@ class World():
 		}
 		self.events['button_presses'].append(event)
 
-		# Move the button backward and move the gate up or down
-		# Depending on which button was pressed
 		button = arbiter.shapes[1].body
 		button.velocity = (-20,0)
 		if button.name == 'top':
@@ -448,35 +435,36 @@ class World():
 
 		return True
 
-	#  Stop button from moving when contacting sensor
+	# Stop the button when it collides with the sensor
 	def button_sensor_col(self, arbiter, space, data):
 		button = arbiter.shapes[0].body
 		button.velocity = (0,0)
 		return True
 
-	# Stop button from moving when contacting wall
+	# Stop the button when it hits the back wall
 	def button_wallstop_col(self, arbiter, space, data):
 		button = arbiter.shapes[0].body
 		x,y = button.velocity
-		# hack that lets the button return to pressable condition
 		if x < 0:
 			button.velocity = (0,0)
 		return True
 
-	# Stop the gate when it contacts a wall
+	# Stop the gate when it collides with the wall
 	def gate_wall_col(self, arbiter, space, data):
 		gate = arbiter.shapes[0].body
 		gate.velocity = (0,0)
 		return True
 
-	# Stop the gate when it returns to middle and contacts a stop sensor
+	# Stop the gate when it collides with a stop sensor
 	def gate_sensor_col(self, arbiter, space, data):
 		gate = arbiter.shapes[0].body
 		gate.velocity = (0,0)
-		# ran into a bug where the buttons started moving forward as soon as
-		# the scene started because the gate first "contacted" the sensors
-		# This hack prevents that from happening. Could be a more elegant way
+		# This code resets the buttons to the a pressable position after
+		# the gate arrives back in the middle. It's constrained not to run
+		# on the first step so that the buttons are not activated as soon
+		# as the clip starts (when the gate is initialized)
 		if self.step != 0:
+			sensor = arbiter.shapes[1].body.name
 			self.bodies['bottom'].velocity = (20,0)
 			self.bodies['top'].velocity = (20,0)
 		return True
@@ -519,7 +507,6 @@ class World():
 	###################################################################
 
 	############ Counterfactual manipulation procedures ###############
-	# Remove a given object
 	def remove(self,obj,step,animate):
 		if self.step == step:
 			self.space.remove(self.shapes[obj]) #remove body from space 
@@ -529,7 +516,6 @@ class World():
 			if animate: 		
 				del self.sprites[obj] #remove sprite 
 
-	# Perturb a given object
 	def perturb(self,obj,step,magnitude=0):
 		if self.step == step:
 			b = self.bodies[obj]
@@ -565,6 +551,27 @@ class World():
 	##################################################################
 
 ################ Model 1 for pragmatic judgement #################
+
+
+# Given a trial dictionary, setup the world and simulate the trial
+def run_trial(trial, animate=False, noise=0, perturb=0, prob=0, rec_paths=False, save=False, info=[], img_dir="", save_dir="", save_frames=[], cut_sim=False):
+	balls = trial['balls']
+	if 'boxes' in trial:
+		boxes = trial['boxes']
+	else:
+		boxes = []
+
+	w = World(gate=('gate' in trial))
+	for ball in balls:
+		w.add_ball(tuple(ball['position']), tuple(ball['velocity']), w.ball_size, ball['name'])
+	for box in boxes:
+		angle = box['angle'] if 'angle' in box else 0
+		w.add_box(tuple(box['position']), w.box_size, w.deg_to_rad(angle), box['name'])
+	if w.gate:
+		gate = trial['gate']
+		w.add_gate(gate['start_pos'])
+
+	return w.simulate(animate=animate, noise=noise, perturb=perturb, prob=prob, save=save, rec_paths=rec_paths, info=info, img_dir=img_dir, save_dir=save_dir, save_frames=save_frames, cut_sim=cut_sim)
 
 
 # A procedure to determine which balls are downstream of a given ball in a 
@@ -606,19 +613,29 @@ def collision_chain(collisions, in_chain, start_time, reverse_time=False):
 		else:
 			return collision_chain(collisions[1:], in_chain, start_time, reverse_time=reverse_time)
 		
-# Quick helper to extract the actual outcome of a trial
+# Convenience procedure to return the actual outcome of a trial
 def outcome(trial):
 	events = run_trial(trial=trial)
 	outcome = events["outcome"]
 	return outcome
 
-# Run the whether cf test on a trial given a trial, candidate cause, target entitiy,
-# uncertainty noise value, and number of samples
+# Run the whether cf test on a trial given a trial, candidate cause, target entity,
+# asuncertainty noise value, and number of samples
 # Return a value indicating the proportion of samples in which the candidate satisfied the whether
-# cause definition
-def whether_test(trial, candidate, target, noise, num_samples, animate=False, test_noise=False):
+# cause definition.
+# In this case, the test is implemented that causers are distinguished from preventers.
+# Causers will receive positive whether cause outcomes and preventers negative
+def whether_test(trial, candidate, target, noise, num_samples, background_removals=[], animate=False, test_noise=False):
 	# Run the simulation naturally
-	events = run_trial(trial=trial, animate=animate)
+	info = []
+	for entity in background_removals:
+		info.append({
+			'action': 'remove',
+			'obj': entity,
+			'step': 0
+			})
+
+	events = run_trial(trial=trial, animate=animate, info=info)
 
 	# Determine the chain of collisions and the outcome
 	col_actual = events['collisions']
@@ -626,8 +643,8 @@ def whether_test(trial, candidate, target, noise, num_samples, animate=False, te
 	noise_steps = collision_chain(col_actual, in_chain, -1)
 	outcome_actual = events['outcome']
 
-	# Add removal manipulation and noise manipulations
-	info = []
+	# Add cf removal and noise manipulations
+	# info = []
 	info.append({
 		'action': 'remove',
 		'obj': candidate,
@@ -648,17 +665,21 @@ def whether_test(trial, candidate, target, noise, num_samples, animate=False, te
 		outcome_cf[i] = events_cf['outcome']
 
 
-	# Return portion of difference making events. Return testing info if desired
+	# If the actual outcome is different from the counterfactual one, return true
 	if not test_noise:
-		return np.mean(outcome_actual != outcome_cf)
+		return np.mean(outcome_actual - outcome_cf)
 	else:
-		return np.mean(outcome_actual != outcome_cf), {'info': info}
+		return np.mean(outcome_actual - outcome_cf), {'info': info}
 
 
-# Computes the how test on a given trial, candidate cause, target entity,
-# for a perturb value and number of samples
-# Return a value representing the portion of samples in which the candidate
-# was a difference maker at fine granularity
+# Run the how cause on a given trial for a candidate and target. Perturb scales
+# the purturbation amount.
+# Currently I've been running the how test for a single sample on the assumption
+# that it is essentially deterministic despite the random perturbation. This is not
+# entirely true, and some simulations have revealed that depending on the trial and
+# size of the perturbation, random effects can make a difference. Given this we
+# might want to think more about our use of this test and whether we want to run more
+# samples and re-think how we combine them.
 def how_test(trial, candidate, target, perturb, num_samples, animate=False):
 	events = run_trial(trial=trial, animate=animate)
 	x,y = events['outcome_fine']
@@ -680,32 +701,18 @@ def how_test(trial, candidate, target, perturb, num_samples, animate=False):
 		x,y = cf_events['outcome_fine']
 		outcome_cf[i,:] = [x,y]
 
-	# return portion of cases that are difference makers
-	return np.mean(np.all(outcome_actual != outcome_cf, axis=1))
+	# return true if the fine outcomes are different
+	return np.all(outcome_actual != outcome_cf, axis=1)
 
 
 # Computes the sufficiency test on a given trial, candidate, and target
-# for a noise value and number of samples
-# Optional to include the box and gate as alternatives
-# Optional also to test whether the cf events took place in the actual world (event_test)
+# for a noise value and number of samples and given set of alternatives
 # Returns a value indicating the proportion of samples for which the candidate is
 # determined sufficient to make the target go through the gate
-def sufficient_test(trial, candidate, target, noise, num_samples, gate_alt=False, box_alt=True, animate=False, test_noise=False, event_test=True):
+def sufficient_test(trial, candidate, target, alternatives, noise, num_samples, animate=False, test_noise=False, event_test=True):
 	events = run_trial(trial=trial, animate=False)
 	# Get the outcome
 	outcome_actual = events['outcome']
-
-	# Get the core and alternative objects for counterfactuals
-	# For now at least, the candidate and target must be balls
-	core = {candidate, target}
-	alternatives = {b['name'] for b in trial['balls']}
-	if box_alt:
-		if 'boxes' in trial:
-			alternatives.add('box')
-	if gate_alt:
-		if 'gate' in trial:
-			alternatives.add('gate')
-	alternatives = alternatives - core
 
 	# some objects may need noise after you remove alternatives
 	# Obtain all relevant collisions and sort by timestep
@@ -781,6 +788,9 @@ def sufficient_test(trial, candidate, target, noise, num_samples, gate_alt=False
 	info_cf_cont.append(manip)
 
 	# Run the counterfactuals and cf contingencies
+	# outcome_cf = np.zeros(num_samples)
+	# outcome_cf_cont = np.zeros(num_samples)
+
 	outcomes = np.zeros(num_samples)
 	for i in range(num_samples):
 		events_cf = run_trial(trial=trial, animate=animate, noise=noise, info=info_cf, cut_sim=True)
@@ -805,24 +815,25 @@ def sufficient_test(trial, candidate, target, noise, num_samples, gate_alt=False
 			collision_containment = [col in actual_collisions for col in cf_collisions]
 			bpress_containment = [press in actual_bpresses for press in cf_bpresses]
 
-			containment = all(collision_containment) and all(bpress_containment)
+			containment = (all(collision_containment) and all(bpress_containment))
 
 			outcomes[i] = outcomes[i] and containment
 
-	# Return the proportion of sufficient outcomes and noise info if desired
+
 	if not test_noise:
 		return np.mean(outcomes)
 	else:
 		return np.mean(outcomes), {'info_cf': info_cf, 'info_cf_cont': info_cf_cont}
 
 
-
-# Procedure to test whether the candidate cause is stationary
+# Procedure to test whether the candidate cause is moving
+# Probably need to extend this for causal chains with stationary causes
+# Though not sure yet how it should inform the model
 def moving_test(trial, candidate, target):
 	# Get the event and paths
 	events, paths = run_trial(trial=trial, rec_paths=True)
-	moving = 1
-	# For any collision if the candidate and the target are in a collision
+	moving = True
+	# For all collisions if the candidate and the target are in a collision
 	# and the candidate's velocity is zero beforehand, then the candidate
 	# cause was stationary
 	for col in events["collisions"]:
@@ -830,65 +841,177 @@ def moving_test(trial, candidate, target):
 		if candidate in objects and target in objects:
 			candidate_vel = paths[candidate]['velocity']
 			if candidate_vel[col['step'] - 1] == [0.0, 0.0]:
-				moving = 0
+				moving = False
 
 	return moving
 
 
 
-# A procdedure to compute an aspect representation for a trial
-def aspect_rep(trial, candidate, target, noise=2, perturb=0.01, num_samples=100, gate_alt=False, box_alt=True):
-	o = outcome(trial)
-	w = whether_test(trial, candidate, target, noise, num_samples)
-	h = float(how_test(trial, candidate, target, perturb, 1))
-	s = sufficient_test(trial, candidate, target, noise, num_samples, gate_alt=gate_alt, box_alt=box_alt)
-	st = moving_test(trial, candidate, target)
+################## Procedures to generate aspect representations for the base of the model ####################
 
-	return [w, h, s, st, o]
+### First some procedures to determine relevant alternatives in each trial ###
 
+# Extract the object from a trial dictionary
+# Currently doesn't the gates
+def trial_entities(tr):
+	entities = set()
+	if "balls" in tr:
+		for ball in tr['balls']:
+			entities.add(ball['name'])
 
-# Given a trial dictionary, setup the world and simulate the trial
-def run_trial(trial, animate=False, noise=0, perturb=0, prob=0, rec_paths=False, save=False, info=[], img_dir="", save_dir="", save_frames=[], cut_sim=False):
-	balls = trial['balls']
-	if 'boxes' in trial:
-		boxes = trial['boxes']
+	if 'boxes' in tr:
+		for box in tr['boxes']:
+			entities.add(box['name'])
+
+	return entities
+
+# Given a set of alternatives, return all subsets of the set
+def subset(alternatives):
+	if len(alternatives) == 0:
+		return [[]]
 	else:
-		boxes = []
+		x = alternatives[0]
+		return subset(alternatives[1:]) + [[x] + y for y in subset(alternatives[1:])]
 
-	w = World(gate=('gate' in trial))
-	for ball in balls:
-		w.add_ball(tuple(ball['position']), tuple(ball['velocity']), w.ball_size, ball['name'])
-	for box in boxes:
-		angle = box['angle'] if 'angle' in box else 0
-		w.add_box(tuple(box['position']), w.box_size, w.deg_to_rad(angle), box['name'])
-	if w.gate:
-		gate = trial['gate']
-		w.add_gate(gate['start_pos'])
+# Given a trial, assess for each entity in the scene if it
+# is a whether cause in all counterfactual contingencies. Record
+# outcome for each entitiy and removal set. Don't consider the target
 
-	return w.simulate(animate=animate, noise=noise, perturb=perturb, prob=prob, save=save, rec_paths=rec_paths, info=info, img_dir=img_dir, save_dir=save_dir, save_frames=save_frames, cut_sim=cut_sim)
+# Currently simulations are deterministic for simplicity.
+# This could be modified and extended
+
+# Returns a dictionary of lists where each key in the dictionary maps from
+# an entity in the trial to a list where the items of the list are pairs
+# denoting a removal set, and the resulting whether test outcome given that removal
+# set
+def assess_trial(test_trial, animate=False):
+
+	# Extract all the entities in the trial
+	entities = trial_entities(test_trial)
+
+	# Remove the target entity, as it can't have causal status
+	entities = entities - {'B'}
 
 
-def viewers(trials, prior):
+	e_record = {}
+	for e in entities:
+		alternatives = entities - {e}
+		cfs = []
+		if animate:
+			print("Entity")
+			print(e)
+		# Consider each removal set
+		for removal_set in subset(list(alternatives)):
+			if animate:
+				print("Removed")
+				print(removal_set)
+			wh_value = whether_test(trial = test_trial, candidate=e, target='B', noise=0, num_samples=1, background_removals=removal_set, animate=animate)
 
-	def cf(x):
-		t = trials[x].copy()
-		t["balls"] = t["balls"][1:]
-		print(json.dumps(t, indent=2))
-		run_trial(t, animate=True)
 
-	def suff(x):
-		t = trials[x].copy()
-		t["boxes"] = []
-		print(json.dumps(t, indent=2))
-		run_trial(t, animate=True)
+			cfs.append((removal_set, wh_value))
 
-	def anim(x):
-		t = trials[x]
-		print(json.dumps(t, indent=2))
-		print(prior[x])
-		run_trial(t, animate=True)
+		if animate:
+			print()
 
-	return cf, suff, anim
+		e_record[e] = cfs
+
+	return e_record
+
+
+# Given a set of trials, compute whether tests in all counterfactual contingencies
+# Then convert to a dataframe organized by trial, entitiy, and removal set with
+# information about causer and preventer status
+
+# Allows us to save the info about alternative status so it doesn't need to be
+# re-generated each time
+def create_trial_assessment_df(trials):
+	# Initialize dict
+	cont_dict = {'trial':[], 'entity':[], 'removal_set':[], 'value':[]}
+
+	# Loop across the trials
+	for tr in trials:
+		trial_num = tr['trial']
+		record = assess_trial(tr)
+
+		# For each entity
+		for e, contingencies in record.items():
+			# Consider each contingency
+			for cont,v in contingencies:
+				# Append the trial, entity in consideration, the removal set,
+				# and the corresponding whether value
+				cont_dict['trial'].append(trial_num)
+				cont_dict['entity'].append(e)
+				cont_dict['removal_set'].append(cont)
+				cont_dict['value'].append(v)
+
+	# Convert to a dataframe
+	df_cont = pd.DataFrame(cont_dict)
+	# Note whether the entity is a causer or preventer in each contingency
+	df_cont['is_causer'] = df_cont['value'] > 0
+	df_cont['is_preventer'] = df_cont['value'] < 0
+	# Produce new df that makes whether an entity in a trial is a preventer
+	# or causer for any removal set
+	alternative_status = df_cont.groupby(['trial', 'entity'], as_index=False)[['is_causer', 'is_preventer']].any()
+
+	# Save df check
+	alternative_status.to_csv('useful_csvs/alternative_status.csv')
+
+	return alternative_status
+
+# Returns a list of sets, where the set is all the valid alternatives
+# in the trial whose number corresponds to the index
+def load_alternative_assessments(alternative_status=None):
+	# If the alternatives statuses are not provided, try to load them
+	if alternative_status == None:
+		try: 
+			alternative_status = pd.read_csv('useful_csvs/alternative_status.csv')
+		except:
+			raise Exception("No alternatives assessment file, please provide dataframe or re-generate.")
+
+	# Get list of trials
+	trials = alternative_status['trial'].unique()
+
+	# For each trial
+	trial_alternatives = []
+	for trial_num in trials:
+		df_temp = alternative_status[alternative_status['trial'] == trial_num]
+
+		trial_set = set()
+		for index, row in df_temp.iterrows():
+			# Add the entity as a potential alternative if it is a causer in some contingency
+			if row['is_causer']:
+				trial_set.add(row['entity'])
+
+		trial_alternatives.append(trial_set)
+
+	return trial_alternatives
+
+
+
+# Return the aspect representation for the trial given the candidate, target, set of
+# valid alternatives, and test parameters
+def aspect_rep(trial, candidate, target, alternatives, noise=2, perturb=0.01, num_samples=100):
+
+	# Check if the candidate is in the trial
+	trial_entities = {ent['name'] for ent in trial['balls']}
+	if 'boxes' in trial:
+		trial_entities.add('box')
+	# Remove candidate if it is a potential alternative for the trial
+	alternatives = alternatives - {candidate}
+
+	if candidate in trial_entities:
+		o = outcome(trial)
+		w = whether_test(trial, candidate, target, noise, num_samples)
+		h = float(how_test(trial, candidate, target, perturb, 1))
+		s = sufficient_test(trial, candidate, target, alternatives, noise, num_samples)
+		mov = moving_test(trial, candidate, target)
+		return [w,h,s,mov,o]
+	else:
+		return [np.nan]*5
+
+
+
+def sum_square(a, b): return np.sum((a-b)**2)
 
 def load_trials(path):
 	with open(path) as f:
