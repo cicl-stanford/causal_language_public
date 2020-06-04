@@ -133,57 +133,34 @@ def meaning(utterance, primary_aspect_values, caused_version, enabled_version, h
       alternative_matrix = np.nan_to_num(np.concatenate(alternative_cause_assessments, 0))
       # check where the alternatives are above the threshold
       above_threshold = alternative_matrix > comparison_threshold
+
+      # This simulates an ^~combined conjunct added on the end of the 
+      # If there is no comparator the value will be 1 (thus not deflating primary meaning value)
+      # If there is a comparator, we take the or with the comparison softener, so the primary
+      # meaning value will be deflated by the value of the softener
+
       # Mark all the cases for which there are no comparison
       no_comparator = ~np.any(above_threshold, axis=0)
       soften_no_comp = (no_comparator + comparison_softener) - (no_comparator * comparison_softener)
 
       return primary_meaning*soften_no_comp
 
-
-
-      # print(aggregator.T)
-      # print(np.sum(!np.isnan(aggregator), axis=0))
-
-      # Make sure no divide by zero. (Divide by nan is fine)
-      # aggregator[aggregator == 0] = 1.0
-      # Normalize by the aggregator
-      # For cases that don't have a comparator, use their value from primary
-      # normalized = primary_meaning/aggregator
-      # no_alternative_indicies = np.argwhere(np.isnan(normalized))
-      # normalized[no_alternative_indicies] = primary_meaning[no_alternative_indicies]
-
-      # A hack to make sure cc method doesn't inflate caused values
-      # if min_trick:
-      #   norm_temp = np.expand_dims(normalized, 0)
-      #   primary_temp = np.expand_dims(primary_meaning, 0)
-      #   comparison = np.concatenate((norm_temp, primary_temp))
-      #   final = np.min(comparison, axis=0)
-
-        # return normalized
-      #   return final
-
-      # else:
-      #   return normalized
-
-      # Return the primary normalized by sum of causal scores of all entities
-      # If primary is zero as well as the alternative scores this will divide by zero
-      # And return nan. Replace aggregate zeros with 1s. Result will be 0/1 = 0
-
-      # return primary_meaning/aggregator
-
   elif utterance == "affected":
     affected = primary_aspect_values[:,h]
     return affected
 
   elif utterance == "didn't affect":
-    whether_or_suff = primary_aspect_values[:,w] + primary_aspect_values[:,s] - primary_aspect_values[:,w]*primary_aspect_values[:,s]
+    whether_or_suff = (primary_aspect_values[:,w] + primary_aspect_values[:,s]) - (primary_aspect_values[:,w]*primary_aspect_values[:,s])
     how_and_flip = primary_aspect_values[:,h] * how_not_affect_param
+    # - or of all disjuncts is same as not and treating each as a conjunct
+    # De Morgan's Law
+    # Probability 1 - x is equivalent
     return 1 - (whether_or_suff + how_and_flip - whether_or_suff*how_and_flip)
 
   else:
     raise Exception("meaning for utterance '{}' not implemented.".format(utterance))
 
-                      # L0(clip | utterance) \propto P(clip) * P(utterance true | clip)
+# L0(clip | utterance) \propto P(clip) * P(utterance true | clip)
 def l0(primary_aspect_values, caused_version, enabled_version, how_not_affect_param, stationary_softener, comparison_threshold=None, comparison_softener=None, alternative_aspect_values = None):
   n_worlds = primary_aspect_values.shape[0]
   # assert n_worlds == trial_max
@@ -256,6 +233,9 @@ def l1(primary_aspect_values, caused_version, enabled_version, how_not_affect_pa
   denominator = np.sum(numerator, axis=1)
   return numerator.T / denominator
 
+
+# Full model function. Requires aspect values for primary object and alternatives, (to be passed down to meaning)
+# Requires all other model parameters other than uncertainty noise (implicit in the aspect values)
 # S2(utterance | clip) \propto P(utterance) * L1(clip | utterance)^optimality
 def s2(primary_aspect_values, caused_version, enabled_version, how_not_affect_param, stationary_softener, speaker_optimality, comparison_threshold=None, comparison_softener=None, alternative_aspect_values = None):
   prior = 1./len(vocabulary)
@@ -264,7 +244,13 @@ def s2(primary_aspect_values, caused_version, enabled_version, how_not_affect_pa
   # normalize within each world to get distribution over utterances
   return unnormalized_s2.T / np.sum(unnormalized_s2, axis=1)
 
-
+# Softmax procedure for lesion model
 def softmax(arr, ax, beta=1):
   exp_arr = np.exp(beta*arr)
   return exp_arr/np.sum(exp_arr, axis=ax)
+
+# Compute lesion model outputs 
+def lesion_model(primary_aspect_values, caused_version, enabled_version, how_not_affect_param, stationary_softener, beta, comparison_threshold=None, comparison_softener=None, alternative_aspect_values=None):
+  semantic_values = np.vstack([meaning(word, primary_aspect_values, caused_version, enabled_version, how_not_affect_param, stationary_softener, comparison_threshold=comparison_threshold, comparison_softener=comparison_softener, alternative_aspect_values=alternative_aspect_values) for word in vocabulary])
+  semantic_values = softmax(semantic_values, 0, beta=beta)
+  return semantic_values

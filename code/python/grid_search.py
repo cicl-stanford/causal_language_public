@@ -3,229 +3,17 @@ import json
 import sqlite3
 import pandas as pd
 import time
+import rsa
 
 vocabulary_dataset = ["cause", "enable", "affect", "no_difference"]
 vocabulary = ["caused", "enabled", "affected", "didn't affect"]
 w, h, s, m, o = (0, 1, 2, 3, 4)
 
-
 trial_max = 31
-min_trick = True
-
-def caused_subroutine(primary_aspect_values, caused_version, stationary_softener):
-  # base caused definition or (whether, sufficiency) and how
-  suff_or_necc = np.sum(primary_aspect_values[:,[w,s]], axis=1) - np.prod(primary_aspect_values[:,[w,s]], axis=1)
-  caused_base = suff_or_necc * primary_aspect_values[:,h]
-  # and moving feature
-  if caused_version == "and_h_or_ws" or caused_version == "and_h_or_ws_cc" or caused_version == "and_h_or_ws_cc_dummy":
-    return caused_base
-  elif caused_version == "and_hm_or_ws" or caused_version == "and_hm_or_ws_cc" or caused_version == "and_hm_or_ws_cc_dummy":
-    moving = primary_aspect_values[:,m]
-    # soften the moving feature
-    soften_moving = (moving + stationary_softener) - (moving * stationary_softener) 
-    return caused_base * soften_moving
-  else:
-    raise Exception("meaning for caused version '{}' not implemented".format(caused_version))
-
-
-def meaning(utterance, primary_aspect_values, caused_version, enabled_version, how_not_affect_param, stationary_softener, comparison_threshold=None, comparison_softener=None, alternative_aspect_values = None):
-  if utterance == "enabled":
-    if enabled_version == "or_ws":
-      # or whether, sufficiency
-      return np.sum(primary_aspect_values[:,[w,s]], axis=1) - np.prod(primary_aspect_values[:,[w,s]], axis=1)
-    elif enabled_version == "or_ws_and_nh":
-      or_ws = np.sum(primary_aspect_values[:,[w,s]], axis=1) - np.prod(primary_aspect_values[:,[w,s]], axis=1)
-      or_ws_and_nh = or_ws * (1 - primary_aspect_values[:,h])
-      return or_ws_and_nh
-
-  elif utterance == "caused":
-    if "cc" not in caused_version:
-      return caused_subroutine(primary_aspect_values, caused_version, stationary_softener)
-    elif "dummy" not in caused_version:
-      if alternative_aspect_values == None:
-        raise Exception("No alternative aspects for computing combined cause")
-      # get the meanings scores of the primary candidate
-      primary_meaning = caused_subroutine(primary_aspect_values, caused_version, stationary_softener)
-      # initialize the aggregator with the scores of the primary candidate
-      cause_assessments = np.expand_dims(primary_meaning,0)
-
-      # collect the meanings in an array
-      for alternative in alternative_aspect_values:
-        alterative_meaning = np.expand_dims(caused_subroutine(alternative, caused_version, stationary_softener), 0)
-        cause_assessments = np.concatenate((cause_assessments, alterative_meaning), 0)
-
-
-      normalized = primary_meaning.copy()
-      comp_indicies = np.argwhere(np.sum(~np.isnan(cause_assessments), axis=0) != 1).T[0]
-      no_comp_indicies = np.argwhere(np.sum(~np.isnan(cause_assessments), axis=0) == 1).T[0]
-
-      comp_denom = np.nansum(cause_assessments[:, comp_indicies], axis=0)
-      comp_denom[comp_denom == 0] = 1.0
-      normalized[comp_indicies] = normalized[comp_indicies]/comp_denom
-
-      if min_trick:
-        normalized = np.minimum(normalized, primary_meaning)
-
-      return normalized
-    else:
-      if alternative_aspect_values == None:
-        raise Exception("No alternative aspects for computing combined cause")
-      if comparison_threshold == None:
-        raise Exception("No threshold for dummy comparison")
-      if comparison_softener == None:
-        raise Exception("No softener for dummy comparison")
-
-      primary_meaning = caused_subroutine(primary_aspect_values, caused_version, stationary_softener)
-
-      alternative_cause_assessments = tuple([np.expand_dims(caused_subroutine(alt, caused_version, stationary_softener), 0) for alt in alternative_aspect_values])
-
-      alternative_matrix = np.nan_to_num(np.concatenate(alternative_cause_assessments, 0))
-      above_threshold = alternative_matrix > comparison_threshold
-      # print(alternative_matrix > 0.5)
-      no_comparator = ~np.any(above_threshold, axis=0)
-      soften_no_comp = (no_comparator + comparison_softener) - (no_comparator * comparison_softener)
-
-      return primary_meaning*soften_no_comp
-
-
-
-      # print(aggregator.T)
-      # print(np.sum(!np.isnan(aggregator), axis=0))
-
-      # Make sure no divide by zero. (Divide by nan is fine)
-      # aggregator[aggregator == 0] = 1.0
-      # Normalize by the aggregator
-      # For cases that don't have a comparator, use their value from primary
-      # normalized = primary_meaning/aggregator
-      # no_alternative_indicies = np.argwhere(np.isnan(normalized))
-      # normalized[no_alternative_indicies] = primary_meaning[no_alternative_indicies]
-
-      # A hack to make sure cc method doesn't inflate caused values
-      # if min_trick:
-      #   norm_temp = np.expand_dims(normalized, 0)
-      #   primary_temp = np.expand_dims(primary_meaning, 0)
-      #   comparison = np.concatenate((norm_temp, primary_temp))
-      #   final = np.min(comparison, axis=0)
-
-        # return normalized
-      #   return final
-
-      # else:
-      #   return normalized
-
-      # Return the primary normalized by sum of causal scores of all entities
-      # If primary is zero as well as the alternative scores this will divide by zero
-      # And return nan. Replace aggregate zeros with 1s. Result will be 0/1 = 0
-
-      # return primary_meaning/aggregator
-
-  elif utterance == "affected":
-    affected = primary_aspect_values[:,h]
-    return affected
-
-  elif utterance == "didn't affect":
-    whether_or_suff = primary_aspect_values[:,w] + primary_aspect_values[:,s] - primary_aspect_values[:,w]*primary_aspect_values[:,s]
-    how_and_flip = primary_aspect_values[:,h] * how_not_affect_param
-    return 1 - (whether_or_suff + how_and_flip - whether_or_suff*how_and_flip)
-
-  else:
-    raise Exception("meaning for utterance '{}' not implemented.".format(utterance))
-
-                      # L0(clip | utterance) \propto P(clip) * P(utterance true | clip)
-def l0(primary_aspect_values, caused_version, enabled_version, how_not_affect_param, stationary_softener, comparison_threshold=None, comparison_softener=None, alternative_aspect_values = None):
-  n_worlds = primary_aspect_values.shape[0]
-  # assert n_worlds == trial_max
-  prior = 1./n_worlds
-  # number of utterances X number of worlds
-  likelihood = np.array([meaning(utterance, primary_aspect_values, caused_version, enabled_version, how_not_affect_param, stationary_softener, comparison_threshold=comparison_threshold, comparison_softener=comparison_softener, alternative_aspect_values=alternative_aspect_values) for utterance in vocabulary])
-  unnormalized_l0 = prior*likelihood
-
-  # normalize within each utterance to get distribution over worlds
-  normalization_constants = np.sum(unnormalized_l0, axis=1)
-
-  # There may be some utterance which is false for all worlds.
-  # In that case, we can't make a well-defined probability distribution over worlds.
-  # But we will just return 0 for every world in that group.
-  # This is fine, because if the utterance is false for all worlds,
-  # we want the likelihood of that utterance given each world to be 0.
-  numerator = unnormalized_l0.T
-  denominator = normalization_constants
-
-  # numerator is only nonzero if well defined normalization constant exists
-  well_defined = normalization_constants > 0
-
-  # For any denominator that is not well defined (i.e. equal to zero)
-  # Add 1 to it. The normalization will then be each world (value 0) divided by 1
-  denominator = denominator + (1 - well_defined)
-
-  # number of worlds X number of utterances
-  return numerator / denominator
-
-# S1(utterance | clip) \propto P(utterance) * L0(clip | utterance)^optimality
-def s1(primary_aspect_values, caused_version, enabled_version, how_not_affect_param, stationary_softener, speaker_optimality, comparison_threshold=None, comparison_softener=None, alternative_aspect_values=None):
-  prior = 1./len(vocabulary)
-  likelihood = l0(primary_aspect_values, caused_version, enabled_version, how_not_affect_param, stationary_softener, comparison_threshold=comparison_threshold, comparison_softener=comparison_softener, alternative_aspect_values=alternative_aspect_values)
-  unnormalized_s1 = prior*likelihood**speaker_optimality
-
-  # normalize within each world to get distribution over utterances
-  normalization_constants = np.sum(unnormalized_s1, axis=1)
-  numerator = unnormalized_s1.T
-  denominator = normalization_constants
-
-  # There may be some worlds for which no utterance is true.
-  # In that case, we can't make a well-defined probability distribution over utterances.
-  # But we will just return 0 for every utterance in that group.
-  # This is fine, because if a world cannot be picked out by any utterance,
-  # we want the likelihood of that world given each utterance to be 0
-  
-  # numerator is only nonzero if well defined normalization constant exists
-  well_defined = normalization_constants > 0
-
-  # For any denominator that is not well defined (i.e. equal to zero)
-  # Add 1 to it. The normalization will then be each world (value 0) divided by 1
-  denominator = denominator + (1 - well_defined)
-
-  return numerator / denominator
-
-
-# L1(clip | utterance) \propto P(clip) * S1(utterance | clip)
-# L1(clip | utterance) =  L1(clip | utterance)
-def l1(primary_aspect_values, caused_version, enabled_version, how_not_affect_param, stationary_softener, speaker_optimality, comparison_threshold=None, comparison_softener=None, alternative_aspect_values = None):
-  n_worlds = primary_aspect_values.shape[0]
-  # assert n_worlds == trial_max
-  # prior over world
-  prior = 1./n_worlds
-  # 4 utterances X 32 worlds
-  # for each world, there's a likelihood of the utterance
-  likelihood = s1(primary_aspect_values, caused_version, enabled_version, how_not_affect_param, stationary_softener, speaker_optimality, comparison_threshold=comparison_threshold, comparison_softener=comparison_softener, alternative_aspect_values=alternative_aspect_values)
-  numerator = prior*likelihood
-
-  # normalize within each utterance to get a distribution over  worlds
-  denominator = np.sum(numerator, axis=1)
-  return numerator.T / denominator
-
-# S2(utterance | clip) \propto P(utterance) * L1(clip | utterance)^optimality
-def s2(primary_aspect_values, caused_version, enabled_version, how_not_affect_param, stationary_softener, speaker_optimality, comparison_threshold=None, comparison_softener=None, alternative_aspect_values = None):
-  prior = 1./len(vocabulary)
-  likelihood = l1(primary_aspect_values, caused_version, enabled_version, how_not_affect_param, stationary_softener, speaker_optimality, comparison_threshold=comparison_threshold, comparison_softener=comparison_softener, alternative_aspect_values=alternative_aspect_values)
-  unnormalized_s2 = prior*likelihood**speaker_optimality
-  # normalize within each world to get distribution over utterances
-  return unnormalized_s2.T / np.sum(unnormalized_s2, axis=1)
-
-
-def softmax(arr, ax, beta=1):
-  exp_arr = np.exp(beta*arr)
-  return exp_arr/np.sum(exp_arr, axis=ax)
-
-
-
-box_alternative = 0
-aspect_set = "trial_set"
-
 
 
 # Code to load the data from the sql file
-database_path = "../../data/full_database.db"
+database_path = "../../data/full_database_anonymized.db"
 experiment = "forced_choice_2"
 
 # connect to sql database
@@ -274,53 +62,46 @@ vocab = np.array(['cause', 'enable', 'affect', 'no_difference'])
 def convert_verb(response):
   return (vocab == response).astype(int)
 
+# Adds a column with a vector representation of the selection for easy tally
+# Order of the vector is determined by the vocap array
 df_data = df_data.assign(vec_response = list(map(convert_verb, df_data['response'])))
 
+# sum vectors over trial
 trial_counts = df_data.groupby(["trial"]).vec_response.apply(np.sum)
 
 trial_counts = np.array(trial_counts.values.tolist()).T
 data_averaged = trial_counts/np.sum(trial_counts, axis = 0)
 
 
-# Remove attention check and any excess participant dims
-# data = data[:30, :, :(len(data_objects) - num_failed_attention_check)]
 
-# Get the average value for each response across participats
-# data_averaged = np.mean(data, axis=2).T
 
-# caused_version = "and_hm_or_ws"
+# Procedure for loading aspects to be used in semantic and pragmatic computations
+# Returns the primary aspect values and a list of the alternative aspect value arrays
+# Could generalize to consider any candidate as possible primary. For the moment only
+# considers the first. Works for the current setup
+def load_aspects(uncertainty_noise, num_samples=1000):
+  
+  clips_data = json.load(open("aspects_paper/aspects_noise_{}_samples_{}.json".format(uncertainty_noise, num_samples)))
 
-def load_aspects(uncertainty_noise, aspect_version="standard"):
+  primary_candidate = clips_data[0]
+  alternative_candidates = clips_data[1:]
 
-  if aspect_version == "modified":
-    clips_data = json.load(open("aspects/aspects_noise_{}.json".format(uncertainty_noise)))
-  else:
-    clips_data = json.load(open("priorinfo/clang3_exp_extended_trials_samples_1000__uncertainty_noise_{}__seed_123__whether_test_version_basic__gate_alternative_0__box_alternative_0_vector_representation_new.json".format(uncertainty_noise)))
+  # Convert representation to numpy array
+  primary_aspect_values = np.array([tr['rep'] for tr in primary_candidate])[:,:4]
 
-  if isinstance(clips_data[0], list):
+  alternative_aspect_values = []
 
-    primary_candidate = clips_data[0]
-    alternative_candidates = clips_data[1:]
-
-    primary_aspect_values = np.array([tr['rep'] for tr in primary_candidate])[:,:4]
-
-    alternative_aspect_values = []
-
-    for candidate_aspects in alternative_candidates:
-      alternative_aspects = np.array([tr['rep'] if tr['rep'] != None else np.zeros(7) for tr in candidate_aspects])[:,:4]
-      alternative_aspect_values.append(alternative_aspects)
+  for candidate_aspects in alternative_candidates:
+    alternative_aspects = np.array([tr['rep'] for tr in candidate_aspects])[:,:4]
+    alternative_aspect_values.append(alternative_aspects)
 
   return primary_aspect_values, alternative_aspect_values
 
 
-
-  # clips_data = json.load(open("aspects_paper/experiment_trials_samples_1000__uncertainty_noise_{}__gate_alternative_0__box_alternative_0_vector_representation.json".format(unoise)))
-
-  # primary_aspect_values = np.array([tr['rep'] for tr in clips_data])[:,:4]
-
-  # return primary_aspect_values
-
-
+# compute the sum square error of a model output
+# against a subset of the averaged data values.
+# Model output will be 4*trial_num, and the trial_set vector allows for an
+# arbitrary subset for comparison
 def compute_error(model_output, trial_set):
   data_set = data_averaged[:, trial_set]
   model_set = model_output[:, trial_set]
@@ -330,16 +111,16 @@ def compute_error(model_output, trial_set):
   return sq_err
 
 
-def lesion_model(primary_aspect_values, caused_version, enabled_version, how_not_affect_param, stationary_softener, beta, comparison_threshold=None, comparison_softener=None, alternative_aspect_values=None):
-  semantic_values = np.vstack([meaning(word, primary_aspect_values, caused_version, enabled_version, how_not_affect_param, stationary_softener, comparison_threshold=comparison_threshold, comparison_softener=comparison_softener, alternative_aspect_values=alternative_aspect_values) for word in vocabulary])
-  semantic_values = softmax(semantic_values, 0, beta=beta)
-  return semantic_values
-
-
-
 # For a trial set and set of ranges across parameters, find the parameter setting
-# That minimizes the squared error on the trial set
-def grid_search(trial_set, lesion_rsa, unoise_range, not_affect_param_range, stationary_softener_range, speaker_optimality_range, beta_range, caused_versions = ["and_hm_or_ws"], enabled_versions = ["or_ws"], comparison_threshold_range=None, comparison_softener_range=None, aspect_version="modified", testing=False):
+# That minimizes the squared error on the trial set. Must additionally specify a 
+# whether or not to lesion the full model, as well as a caused version and an enabled version
+# If caused version involves the dummy combined cause must also provide comparison threshold
+# and softener ranges. Can set testing to true to return each parameter setting with its
+# squared error value.
+
+# To improve: remove non-relevant param lists from opt_set when producing testing
+# output
+def grid_search(trial_set, lesion_rsa, unoise_range, not_affect_param_range, stationary_softener_range, speaker_optimality_range, beta_range, caused_version = "and_hm_or_ws_cc", enabled_version = "or_ws", comparison_threshold_range=None, comparison_softener_range=None, testing=False):
 
   if not testing: 
     opt_set = {'unoise': None,
@@ -364,116 +145,88 @@ def grid_search(trial_set, lesion_rsa, unoise_range, not_affect_param_range, sta
 
   for uncertainty_noise in unoise_range:
 
-    if aspect_version == "modified":
-      clips_data = json.load(open("aspects/aspects_noise_{}.json".format(uncertainty_noise)))
-    else:
-      clips_data = json.load(open("priorinfo/clang3_exp_extended_trials_samples_1000__uncertainty_noise_{}__seed_123__whether_test_version_basic__gate_alternative_0__box_alternative_0_vector_representation_new.json".format(uncertainty_noise)))
-
-    if isinstance(clips_data[0], list):
-
-      primary_candidate = clips_data[0]
-      alternative_candidates = clips_data[1:]
-
-      primary_aspect_values = np.array([tr['rep'] for tr in primary_candidate])[:,:4]
-
-      alternative_aspect_values = []
-
-      for candidate_aspects in alternative_candidates:
-        alternative_aspects = np.array([tr['rep'] if tr['rep'] != None else np.zeros(7) for tr in candidate_aspects])[:,:4]
-        alternative_aspect_values.append(alternative_aspects)
-
-    else:
-      primary_aspect_values = np.array([tr['rep'] for tr in clips_data])[:,:4]
-      alternative_aspect_values = None
+    primary_aspect_values, alternative_aspect_values = load_aspects(uncertainty_noise)
 
     for how_not_affect_param in not_affect_param_range:
 
       for stationary_softener in stationary_softener_range:
 
-        for enabled_version in enabled_versions:
+        if "dummy" not in caused_version:
 
-          for caused_version in caused_versions:
+          if lesion_rsa:
 
-            if "dummy" not in caused_version:
+            meanings = np.vstack([rsa.meaning(word, primary_aspect_values, caused_version, enabled_version, how_not_affect_param, stationary_softener, alternative_aspect_values=alternative_aspect_values) for word in vocabulary])
+
+            for beta in beta_range:
+
+              semantic_values = rsa.softmax(meanings, 0, beta=beta)
+              sq_err = compute_error(semantic_values, trial_set)
+
+              if sq_err < opt_set['error']:
+                opt_set['unoise'] = uncertainty_noise
+                opt_set['not_affect_param'] = how_not_affect_param
+                opt_set['stationary_softener'] = stationary_softener
+                opt_set['beta'] = beta
+                opt_set['error'] = sq_err
+
+          else:
+
+            for speaker_optimality in speaker_optimality_range:
+              model_output = rsa.s2(primary_aspect_values, caused_version, enabled_version, how_not_affect_param, stationary_softener, speaker_optimality, alternative_aspect_values=alternative_aspect_values)
+              sq_err = compute_error(model_output, trial_set)
+
+              if not testing:
+                if sq_err < opt_set['error']:
+                  opt_set['unoise'] = uncertainty_noise
+                  opt_set['not_affect_param'] = how_not_affect_param
+                  opt_set['stationary_softener'] = stationary_softener
+                  opt_set['speaker_optimality'] = speaker_optimality
+                  opt_set['error'] = sq_err
+              else:
+                opt_set['unoise'].append(uncertainty_noise)
+                opt_set['not_affect_param'].append(how_not_affect_param)
+                opt_set['stationary_softener'].append(stationary_softener)
+                opt_set['speaker_optimality'].append(speaker_optimality)
+                opt_set['error'].append(sq_err)
+            
+        else:
+
+          for comparison_threshold in comparison_threshold_range:
+
+            for comparison_softener in comparison_softener_range:
 
               if lesion_rsa:
 
-                # print(alternative_aspect_values)
-
-                meanings = np.vstack([meaning(word, primary_aspect_values, caused_version, enabled_version, how_not_affect_param, stationary_softener, alternative_aspect_values=alternative_aspect_values) for word in vocabulary])
+                meanings = np.vstack([rsa.meaning(word, primary_aspect_values, caused_version, enabled_version, how_not_affect_param, stationary_softener, comparison_threshold, comparison_softener, alternative_aspect_values=alternative_aspect_values) for word in vocabulary])
 
                 for beta in beta_range:
-
-                  semantic_values = softmax(meanings, 0, beta=beta)
+                  semantic_values = rsa.softmax(meanings, 0, beta=beta)
                   sq_err = compute_error(semantic_values, trial_set)
-
-
 
                   if sq_err < opt_set['error']:
                     opt_set['unoise'] = uncertainty_noise
                     opt_set['not_affect_param'] = how_not_affect_param
                     opt_set['stationary_softener'] = stationary_softener
                     opt_set['beta'] = beta
+                    opt_set['comparison_threshold'] = comparison_threshold
+                    opt_set['comparison_softener'] = comparison_softener
                     opt_set['error'] = sq_err
 
               else:
 
                 for speaker_optimality in speaker_optimality_range:
-                  model_output = s2(primary_aspect_values, caused_version, enabled_version, how_not_affect_param, stationary_softener, speaker_optimality, alternative_aspect_values=alternative_aspect_values)
+                  model_output = rsa.s2(primary_aspect_values, caused_version, enabled_version, how_not_affect_param, stationary_softener, speaker_optimality, comparison_threshold, comparison_softener, alternative_aspect_values=alternative_aspect_values)
+
                   sq_err = compute_error(model_output, trial_set)
 
-                  if not testing:
-                    if sq_err < opt_set['error']:
-                      opt_set['unoise'] = uncertainty_noise
-                      opt_set['not_affect_param'] = how_not_affect_param
-                      opt_set['stationary_softener'] = stationary_softener
-                      opt_set['speaker_optimality'] = speaker_optimality
-                      opt_set['error'] = sq_err
-                  else:
-                    opt_set['unoise'].append(uncertainty_noise)
-                    opt_set['not_affect_param'].append(how_not_affect_param)
-                    opt_set['stationary_softener'].append(stationary_softener)
-                    opt_set['speaker_optimality'].append(speaker_optimality)
-                    opt_set['error'].append(sq_err)
-            
-            else:
-
-              for comparison_threshold in comparison_threshold_range:
-
-                for comparison_softener in comparison_softener_range:
-
-                  if lesion_rsa:
-
-                    meanings = np.vstack([meaning(word, primary_aspect_values, caused_version, enabled_version, how_not_affect_param, stationary_softener, comparison_threshold, comparison_softener, alternative_aspect_values=alternative_aspect_values) for word in vocabulary])
-
-                    for beta in beta_range:
-                      semantic_values = softmax(meanings, 0, beta=beta)
-                      sq_err = compute_error(semantic_values, trial_set)
-
-                      if sq_err < opt_set['error']:
-                        opt_set['unoise'] = uncertainty_noise
-                        opt_set['not_affect_param'] = how_not_affect_param
-                        opt_set['stationary_softener'] = stationary_softener
-                        opt_set['beta'] = beta
-                        opt_set['comparison_threshold'] = comparison_threshold
-                        opt_set['comparison_softener'] = comparison_softener
-                        opt_set['error'] = sq_err
-
-                  else:
-
-                    for speaker_optimality in speaker_optimality_range:
-                      model_output = s2(primary_aspect_values, caused_version, enabled_version, how_not_affect_param, stationary_softener, speaker_optimality, comparison_threshold, comparison_softener, alternative_aspect_values=alternative_aspect_values)
-
-                      sq_err = compute_error(model_output, trial_set)
-
-                      if sq_err < opt_set['error']:
-                        opt_set['unoise'] = uncertainty_noise
-                        opt_set['not_affect_param'] = how_not_affect_param
-                        opt_set['stationary_softener'] = stationary_softener
-                        opt_set['speaker_optimality'] = speaker_optimality
-                        opt_set['comparison_threshold'] = comparison_threshold
-                        opt_set['comparison_softener'] = comparison_softener
-                        opt_set['error'] = sq_err
+                  if sq_err < opt_set['error']:
+                    opt_set['unoise'] = uncertainty_noise
+                    opt_set['not_affect_param'] = how_not_affect_param
+                    opt_set['stationary_softener'] = stationary_softener
+                    opt_set['speaker_optimality'] = speaker_optimality
+                    opt_set['comparison_threshold'] = comparison_threshold
+                    opt_set['comparison_softener'] = comparison_softener
+                    opt_set['error'] = sq_err
 
 
 
@@ -481,8 +234,15 @@ def grid_search(trial_set, lesion_rsa, unoise_range, not_affect_param_range, sta
 
 
 
-# Split trial set in half
-# Return a tuple where the first set is train and the second is test
+# Procedure to generate random splits of the trial set.
+# When training Bayesian Ordinal Regression, we noted that the model
+# would fail to converge if there where no cases with stationary causes
+# in the training set (because the model never saw variation in the movement feature)
+# We require that the training set have at least one stationary trial
+
+# Requires a list of trial nums and the number of splits to produce
+# Returns a list of tuples where the train list is the left element and
+# the test list is the right element
 def generate_splits(trials, num_splits):
   stationary_trials = {14, 17, 21, 27}
   splits = []
@@ -492,6 +252,7 @@ def generate_splits(trials, num_splits):
     test = np.setdiff1d(trials, train)
     train_set = set(train)
 
+    # Require at least one stationary trial in training to proceed
     if len(train_set.intersection(stationary_trials)) > 0:
       splits.append((train, test))
       i += 1
@@ -648,52 +409,52 @@ beta_range = np.arange(1,15,0.5)
 # print("Runtime:", end_time - start_time)
 
 ######################## Finding enable and lesion best models ###############################
-old_enb_sem_prag = grid_search(trials, lesion_rsa=0, unoise_range=unoise_range, not_affect_param_range=not_affect_param_range, stationary_softener_range=stationary_softener_range, speaker_optimality_range=speaker_optimality_range, beta_range=None, caused_versions = ["and_hm_or_ws_cc"], enabled_versions = ["or_ws"], aspect_version="modified")
+# old_enb_sem_prag = grid_search(trials, lesion_rsa=0, unoise_range=unoise_range, not_affect_param_range=not_affect_param_range, stationary_softener_range=stationary_softener_range, speaker_optimality_range=speaker_optimality_range, beta_range=None, caused_versions = ["and_hm_or_ws_cc"], enabled_versions = ["or_ws"], aspect_version="modified")
 
-new_enb_sem_prag = grid_search(trials, lesion_rsa=0, unoise_range=unoise_range, not_affect_param_range=not_affect_param_range, stationary_softener_range=stationary_softener_range, speaker_optimality_range=speaker_optimality_range, beta_range=None, caused_versions = ["and_hm_or_ws_cc"], enabled_versions = ["or_ws_and_nh"], aspect_version="modified")
+# new_enb_sem_prag = grid_search(trials, lesion_rsa=0, unoise_range=unoise_range, not_affect_param_range=not_affect_param_range, stationary_softener_range=stationary_softener_range, speaker_optimality_range=speaker_optimality_range, beta_range=None, caused_versions = ["and_hm_or_ws_cc"], enabled_versions = ["or_ws_and_nh"], aspect_version="modified")
 
-old_enb_sem_lesion = grid_search(trials, lesion_rsa=1, unoise_range=unoise_range, not_affect_param_range=not_affect_param_range, stationary_softener_range=stationary_softener_range, speaker_optimality_range=None, beta_range=beta_range, caused_versions = ["and_hm_or_ws"], enabled_versions = ["or_ws"], aspect_version="modified")
+# old_enb_sem_lesion = grid_search(trials, lesion_rsa=1, unoise_range=unoise_range, not_affect_param_range=not_affect_param_range, stationary_softener_range=stationary_softener_range, speaker_optimality_range=None, beta_range=beta_range, caused_versions = ["and_hm_or_ws"], enabled_versions = ["or_ws"], aspect_version="modified")
 
-new_enb_sem_lesion = grid_search(trials, lesion_rsa=1, unoise_range=unoise_range, not_affect_param_range=not_affect_param_range, stationary_softener_range=stationary_softener_range, speaker_optimality_range=None, beta_range=beta_range, caused_versions = ["and_hm_or_ws"], enabled_versions = ["or_ws_and_nh"], aspect_version="modified")
+# new_enb_sem_lesion = grid_search(trials, lesion_rsa=1, unoise_range=unoise_range, not_affect_param_range=not_affect_param_range, stationary_softener_range=stationary_softener_range, speaker_optimality_range=None, beta_range=beta_range, caused_versions = ["and_hm_or_ws"], enabled_versions = ["or_ws_and_nh"], aspect_version="modified")
 
-print("Old Enb prag model:")
-print(old_enb_sem_prag)
-print()
-print("New Enb prag model:")
-print(new_enb_sem_prag)
-print()
-print("Old Enb lesion model:")
-print(old_enb_sem_lesion)
-print()
-print("New Enb lesion model:")
-print(new_enb_sem_lesion)
-print()
+# print("Old Enb prag model:")
+# print(old_enb_sem_prag)
+# print()
+# print("New Enb prag model:")
+# print(new_enb_sem_prag)
+# print()
+# print("Old Enb lesion model:")
+# print(old_enb_sem_lesion)
+# print()
+# print("New Enb lesion model:")
+# print(new_enb_sem_lesion)
+# print()
 
-param_settings = [(old_enb_sem_prag, "or_ws", 0), (new_enb_sem_prag, "or_ws_and_nh", 0), (old_enb_sem_lesion, "or_ws", 1), (new_enb_sem_lesion, "or_ws_and_nh", 1)]
+# param_settings = [(old_enb_sem_prag, "or_ws", 0), (new_enb_sem_prag, "or_ws_and_nh", 0), (old_enb_sem_lesion, "or_ws", 1), (new_enb_sem_lesion, "or_ws_and_nh", 1)]
 
-enb_comp_dict = {"lesion_rsa": [], "enabled_version": [], "trial": [], "response": [], "model_y": []}
+# enb_comp_dict = {"lesion_rsa": [], "enabled_version": [], "trial": [], "response": [], "model_y": []}
 
-for i in range(len(param_settings)):
-  params, enabled_version, lesion_rsa = param_settings[i]
-  primary_aspect_values, alternative_aspect_values = load_aspects(params['unoise'], aspect_version="modified")
-  if not lesion_rsa:
-    model_output = s2(primary_aspect_values, caused_version="and_hm_or_ws_cc", enabled_version=enabled_version, how_not_affect_param=params['not_affect_param'], stationary_softener=params['stationary_softener'], speaker_optimality=params['speaker_optimality'], alternative_aspect_values=alternative_aspect_values)
-  else:
-    model_output = lesion_model(primary_aspect_values, caused_version="and_hm_or_ws", enabled_version=enabled_version, how_not_affect_param=params['not_affect_param'], stationary_softener=params['stationary_softener'], beta=params['beta'], alternative_aspect_values=alternative_aspect_values)
+# for i in range(len(param_settings)):
+#   params, enabled_version, lesion_rsa = param_settings[i]
+#   primary_aspect_values, alternative_aspect_values = load_aspects(params['unoise'], aspect_version="modified")
+#   if not lesion_rsa:
+#     model_output = s2(primary_aspect_values, caused_version="and_hm_or_ws_cc", enabled_version=enabled_version, how_not_affect_param=params['not_affect_param'], stationary_softener=params['stationary_softener'], speaker_optimality=params['speaker_optimality'], alternative_aspect_values=alternative_aspect_values)
+#   else:
+#     model_output = lesion_model(primary_aspect_values, caused_version="and_hm_or_ws", enabled_version=enabled_version, how_not_affect_param=params['not_affect_param'], stationary_softener=params['stationary_softener'], beta=params['beta'], alternative_aspect_values=alternative_aspect_values)
 
 
-  for trial in range(30):
-    for j in range(len(vocabulary_dataset)):
-      verb = vocabulary_dataset[j]
+#   for trial in range(30):
+#     for j in range(len(vocabulary_dataset)):
+#       verb = vocabulary_dataset[j]
 
-      enb_comp_dict['lesion_rsa'].append(lesion_rsa)
-      enb_comp_dict['enabled_version'].append(enabled_version)
-      enb_comp_dict['trial'].append(trial)
-      enb_comp_dict['response'].append(verb)
-      enb_comp_dict['model_y'].append(model_output[j,trial])
+#       enb_comp_dict['lesion_rsa'].append(lesion_rsa)
+#       enb_comp_dict['enabled_version'].append(enabled_version)
+#       enb_comp_dict['trial'].append(trial)
+#       enb_comp_dict['response'].append(verb)
+#       enb_comp_dict['model_y'].append(model_output[j,trial])
 
-df_enb_comp = pd.DataFrame(enb_comp_dict)
-df_enb_comp.to_csv('useful_csvs/enabled_definition.csv')
+# df_enb_comp = pd.DataFrame(enb_comp_dict)
+# df_enb_comp.to_csv('useful_csvs/enabled_definition.csv')
 
 
 
