@@ -260,44 +260,12 @@ def generate_splits(trials, num_splits):
   return splits
 
 
-def cross_validation(splits, lesion_rsa, unoise_range, not_affect_param_range, stationary_softener_range, speaker_optimality_range, beta_range, caused_version=["and_hm_or_ws"], enabled_version = ["or_ws"], aspect_version="modified"):
+def cross_validation(splits, lesion_rsa, unoise_range, not_affect_param_range, stationary_softener_range, speaker_optimality_range, beta_range, caused_version="and_hm_or_ws_cc", enabled_version="or_ws", save_models=False):
 
-  # splits = generate_splits(trials, num_splits)
-  error_scores = []
-
-  for i in range(len(splits)):
-    if i % 10 == 0:
-      print("Split", str(i))
-    spl = splits[i]
-    train = spl[0]
-    test = spl[1]
-
-    parameters = grid_search(train, lesion_rsa, unoise_range, not_affect_param_range, stationary_softener_range, speaker_optimality_range, beta_range, caused_versions=caused_version, enabled_versions=enabled_version, aspect_version=aspect_version)
-
-    primary_aspect_values, alternative_aspect_values = load_aspects(parameters['unoise'], aspect_version=aspect_version)
-    not_affect_param = parameters['not_affect_param']
-    stationary_softener = parameters['stationary_softener']
-    fine_tune = parameters['speaker_optimality'] if not lesion_rsa else parameters['beta']
-    if not lesion_rsa:
-      model_output = s2(primary_aspect_values, caused_version[0], enabled_version[0], not_affect_param, stationary_softener, fine_tune, alternative_aspect_values=alternative_aspect_values)
-    else:
-      model_output = lesion_model(primary_aspect_values, caused_version[0], enabled_version[0], not_affect_param, stationary_softener, fine_tune, alternative_aspect_values=alternative_aspect_values)
-      # semantic_values = np.vstack([meaning(word, primary_aspect_values, caused_version[0], enabled_version[0], not_affect_param, stationary_softener) for word in vocabulary])
-      # model_output = softmax(semantic_values, ax=0, beta=fine_tune)
-
-    split_error = compute_error(model_output, test)
-
-    error_scores.append(split_error)
-
-  return np.array(error_scores)
-
-
-def save_models(splits, lesion_rsa, unoise_range, not_affect_param_range, stationary_softener_range, speaker_optimality_range, beta_range, caused_version=["and_hm_or_ws"], enabled_version = ["or_ws"], aspect_version="modified"):
-
-  # splits = generate_splits(trials, num_splits)
-  # error_scores = []
-
-  df_predictions = {"split": [], "lesion_rsa": [], "caused_version": [], "model_params": [], "trial": [], "verb": [], "model_pred": [], "data_val": [], "use": []}
+  if not save_models:
+    error_scores = []
+  else:
+    df_predictions = {"split": [], "lesion_rsa": [], "caused_version": [], "model_params": [], "trial": [], "verb": [], "model_pred": [], "data_val": [], "use": []}
 
   for i in range(len(splits)):
     if i % 10 == 0:
@@ -306,61 +274,111 @@ def save_models(splits, lesion_rsa, unoise_range, not_affect_param_range, statio
     train = spl[0]
     test = spl[1]
 
-    parameters = grid_search(train, lesion_rsa, unoise_range, not_affect_param_range, stationary_softener_range, speaker_optimality_range, beta_range, caused_versions=caused_version, enabled_versions=enabled_version)
+    parameters = grid_search(train, lesion_rsa, unoise_range, not_affect_param_range, stationary_softener_range, speaker_optimality_range, beta_range, caused_version=caused_version, enabled_version=enabled_version)
 
-    primary_aspect_values, alternative_aspect_values = load_aspects(parameters['unoise'], aspect_version=aspect_version)
+    primary_aspect_values, alternative_aspect_values = load_aspects(parameters['unoise'])
     not_affect_param = parameters['not_affect_param']
     stationary_softener = parameters['stationary_softener']
     fine_tune = parameters['speaker_optimality'] if not lesion_rsa else parameters['beta']
     if not lesion_rsa:
-      model_output = s2(primary_aspect_values, caused_version[0], enabled_version[0], not_affect_param, stationary_softener, fine_tune, alternative_aspect_values=alternative_aspect_values)
+      model_output = rsa.s2(primary_aspect_values, caused_version, enabled_version, not_affect_param, stationary_softener, fine_tune, alternative_aspect_values=alternative_aspect_values)
     else:
-      model_output = lesion_model(primary_aspect_values, caused_version[0], enabled_version[0], not_affect_param, stationary_softener, fine_tune, alternative_aspect_values=alternative_aspect_values)
-      # semantic_values = np.vstack([meaning(word, primary_aspect_values, caused_version[0], enabled_version[0], not_affect_param, stationary_softener) for word in vocabulary])
-      # model_output = softmax(semantic_values, ax=0, beta=fine_tune)
+      model_output = rsa.lesion_model(primary_aspect_values, caused_version, enabled_version, not_affect_param, stationary_softener, fine_tune, alternative_aspect_values=alternative_aspect_values)
+
+    if not save_models:
+      split_error = compute_error(model_output, test)
+      error_scores.append(split_error)
+
+    else:
+
+      train_model = model_output[:, train]
+      train_data = data_averaged[:, train]
+      test_model = model_output[:, test]
+      test_data = data_averaged[:, test]
+
+      assert test_model.shape[1] == 15
+
+      for j in range(train_model.shape[1]):
+        train_trial = train[j]
+        test_trial = test[j]
+        for k in range(len(vocabulary)):
+          verb = vocabulary[k]
+
+          df_predictions['split'].append(i)
+          df_predictions['lesion_rsa'].append(lesion_rsa)
+          df_predictions['caused_version'] = caused_version
+          df_predictions['model_params'].append([parameters['unoise'], not_affect_param, stationary_softener] + ([fine_tune, None] if not lesion_rsa else [None, fine_tune]))
+          df_predictions['trial'].append(train_trial)
+          df_predictions['verb'].append(verb)
+          df_predictions['model_pred'].append(train_model[k,j])
+          df_predictions['data_val'].append(train_data[k,j])
+          df_predictions['use'].append("train")
 
 
-    train_model = model_output[:, train]
-    train_data = data_averaged[:, train]
-    test_model = model_output[:, test]
-    test_data = data_averaged[:, test]
-
-    assert test_model.shape[1] == 15
-
-    for j in range(train_model.shape[1]):
-      train_trial = train[j]
-      test_trial = test[j]
-      for k in range(len(vocabulary)):
-        verb = vocabulary[k]
-
-        df_predictions['split'].append(i)
-        df_predictions['lesion_rsa'].append(lesion_rsa)
-        df_predictions['caused_version'] = caused_version[0]
-        df_predictions['model_params'].append([parameters['unoise'], not_affect_param, stationary_softener] + ([fine_tune, None] if not lesion_rsa else [None, fine_tune]))
-        df_predictions['trial'].append(train_trial)
-        df_predictions['verb'].append(verb)
-        df_predictions['model_pred'].append(train_model[k,j])
-        df_predictions['data_val'].append(train_data[k,j])
-        df_predictions['use'].append("train")
+          df_predictions['split'].append(i)
+          df_predictions['lesion_rsa'].append(lesion_rsa)
+          df_predictions['caused_version'] = caused_version
+          df_predictions['model_params'].append([parameters['unoise'], not_affect_param, stationary_softener] + ([fine_tune, None] if not lesion_rsa else [None, fine_tune]))
+          df_predictions['trial'].append(test_trial)
+          df_predictions['verb'].append(verb)
+          df_predictions['model_pred'].append(test_model[k,j])
+          df_predictions['data_val'].append(test_data[k,j])
+          df_predictions['use'].append("test")
 
 
-        df_predictions['split'].append(i)
-        df_predictions['lesion_rsa'].append(lesion_rsa)
-        df_predictions['caused_version'] = caused_version[0]
-        df_predictions['model_params'].append([parameters['unoise'], not_affect_param, stationary_softener] + ([fine_tune, None] if not lesion_rsa else [None, fine_tune]))
-        df_predictions['trial'].append(test_trial)
-        df_predictions['verb'].append(verb)
-        df_predictions['model_pred'].append(test_model[k,j])
-        df_predictions['data_val'].append(test_data[k,j])
-        df_predictions['use'].append("test")
+  if not save_models:
+    return np.array(error_scores)
+  else:
+
+    df_predictions = pd.DataFrame(df_predictions)
+    filename = "useful_csvs/cross_validation_full_model.csv" if not lesion_rsa else "useful_csvs/cross_validation_lesion_model.csv"
+
+    df_predictions.to_csv(filename)
+    return df_predictions
 
 
+# Saves a given list of models to file for comparison in R
+# Each model is represented by a dictionary. The dictionary includes the 
+# model params, separated from the caused version, enabled version, and
+# lesion rsa version, our axes of comparison
 
-    # split_error = compute_error(model_output, test)
+# Takes a list of dictionaries
+# Returns a dataframe
 
-    # error_scores.append(split_error)
+def save_model(models, output_file=None):
 
-  return pd.DataFrame(df_predictions)
+  output_dict = {'caused_version': [], 'enabled_version': [], 'lesion_rsa': [], 'trial': [], 'response': [], 'model_y': []}
+
+  for model in models:
+    params = model['params']
+    lesion_rsa = model['lesion_rsa']
+    caused_version = model['caused_version']
+    enabled_version = model['enabled_version']
+    primary_aspect_values, alternative_aspect_values = load_aspects(params['unoise'])
+
+    if not lesion_rsa:
+      model_output = rsa.s2(primary_aspect_values, caused_version=caused_version, enabled_version=enabled_version, how_not_affect_param=params['not_affect_param'], stationary_softener=params['stationary_softener'], speaker_optimality=params['speaker_optimality'], alternative_aspect_values=alternative_aspect_values)
+    else:
+      model_output = rsa.lesion_model(primary_aspect_values, caused_version=caused_version, enabled_version=enabled_version, how_not_affect_param=params['not_affect_param'], stationary_softener=params['stationary_softener'], beta=params['beta'], alternative_aspect_values=alternative_aspect_values)
+
+    for trial in range(30):
+      for j in range(len(vocabulary_dataset)):
+        verb = vocabulary_dataset[j]
+
+        output_dict['lesion_rsa'].append(lesion_rsa)
+        output_dict['caused_version'].append(caused_version)
+        output_dict['enabled_version'].append(enabled_version)
+        output_dict['trial'].append(trial)
+        output_dict['response'].append(verb)
+        output_dict['model_y'].append(model_output[j,trial])
+
+  df_output = pd.DataFrame(output_dict)
+
+  if output_file != None:
+    df_output.to_csv(output_file)
+
+  return df_output
+
 
 trials = np.arange(30)
 # testing ranges
@@ -379,34 +397,63 @@ speaker_optimality_range = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2, 2.25, 2.5, 2.75, 3
 comparison_threshold_range = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 comparison_softener_range = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
 speaker_optimality_range = [0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0, 2.25, 2.5, 2.75, 3.0]
-# speaker_optimality_range = np.arange(0.5,3,0.1)
 beta_range = np.arange(1,15,0.5)
 
+############################## Find and save best models to file ###################################
 
-############################## Writing opt models to file by split #################################
-# np.random.seed(1)
+# Uncomment to find best full and no pragmatics models. Considers both combined cause
+# and non combined cause models
 
-# splits = generate_splits(trials, 100)
+# cc_full_model = grid_search(trials, lesion_rsa=0, unoise_range=unoise_range, not_affect_param_range=not_affect_param_range, stationary_softener_range=stationary_softener_range, speaker_optimality_range=speaker_optimality_range, beta_range=None, caused_version = "and_hm_or_ws_cc", enabled_version = "or_ws")
 
-# df_splits = pd.DataFrame({"train": [spl[0] for spl in splits], "test": [spl[1] for spl in splits]})
-# df_splits.to_csv("crossv_splits.csv")
+# normal_full_model = grid_search(trials, lesion_rsa=0, unoise_range=unoise_range, not_affect_param_range=not_affect_param_range, stationary_softener_range=stationary_softener_range, speaker_optimality_range=speaker_optimality_range, beta_range=None, caused_version = "and_hm_or_ws", enabled_version = "or_ws")
 
-# start_time = time.time()
-# full = save_models(splits, 0, unoise_range, not_affect_param_range, stationary_softener_range, speaker_optimality_range, beta_range)
-# end_time = time.time()
+# cc_lesion_model = grid_search(trials, lesion_rsa=1, unoise_range=unoise_range, not_affect_param_range=not_affect_param_range, stationary_softener_range=stationary_softener_range, speaker_optimality_range=None, beta_range=beta_range, caused_version="and_hm_or_ws_cc", enabled_version="or_ws")
 
-# # print("Average Full Error:", np.mean(full_error))
-# full.to_csv("split_performance_full.csv")
-# print("Runtime:", end_time - start_time)
+# normal_lesion_model = grid_search(trials, lesion_rsa=1, unoise_range=unoise_range, not_affect_param_range=not_affect_param_range, stationary_softener_range=stationary_softener_range, speaker_optimality_range=None, beta_range=beta_range, caused_version="and_hm_or_ws", enabled_version="or_ws")
+
+# print("CC Full Model params")
+# print(cc_full_model)
+# print()
+# print("Full Model params")
+# print(normal_full_model)
+# print()
+# print("CC Lesion Model params")
+# print(cc_lesion_model)
+# print()
+# print("Lesion Model params")
+# print(normal_lesion_model)
 # print()
 
-# start_time = time.time()
-# lesion = save_models(splits, 1, unoise_range, not_affect_param_range, stationary_softener_range, speaker_optimality_range, beta_range)
-# end_time = time.time()
+# models = [{'params': cc_full_model, 'lesion_rsa': 0, 'caused_version': "and_hm_or_ws_cc", 'enabled_version': "or_ws"}, {'params': normal_full_model, 'lesion_rsa': 0, 'caused_version': "and_hm_or_ws", 'enabled_version': "or_ws"}, {'params': cc_lesion_model, 'lesion_rsa': 1, 'caused_version': "and_hm_or_ws_cc", "enabled_version": "or_ws"}, {'params': normal_lesion_model, 'lesion_rsa': 1, 'caused_version': "and_hm_or_ws", 'enabled_version': "or_ws"}]
 
-# lesion.to_csv("split_performance_lesion.csv")
-# # print("Average Lesion Error:", np.mean(lesion_error))
-# print("Runtime:", end_time - start_time)
+# save_model(models, output_file = "useful_csvs/top_models.csv")
+
+
+############################## Run grid search on best full and no prag model #################################
+np.random.seed(1)
+
+# Generate and save splits
+splits = generate_splits(trials, 100)
+
+df_splits = pd.DataFrame({"train": [spl[0] for spl in splits], "test": [spl[1] for spl in splits]})
+df_splits.to_csv("useful_csvs/crossv_splits.csv")
+
+# Run grid search for full model. Write opt model for each split to file
+start_time = time.time()
+full = cross_validation(splits, 0, unoise_range, not_affect_param_range, stationary_softener_range, speaker_optimality_range, beta_range, caused_version="and_hm_or_ws_cc", enabled_version="or_ws", save_models=True)
+end_time = time.time()
+
+
+print("Runtime:", end_time - start_time)
+print()
+
+# Run grid search for no pragmatics model. Write opt model for each split to file
+start_time = time.time()
+lesion = cross_validation(splits, 1, unoise_range, not_affect_param_range, stationary_softener_range, speaker_optimality_range, beta_range, caused_version="and_hm_or_ws", enabled_version="or_ws", save_models=True)
+end_time = time.time()
+
+print("Runtime:", end_time - start_time)
 
 ######################## Finding enable and lesion best models ###############################
 # old_enb_sem_prag = grid_search(trials, lesion_rsa=0, unoise_range=unoise_range, not_affect_param_range=not_affect_param_range, stationary_softener_range=stationary_softener_range, speaker_optimality_range=speaker_optimality_range, beta_range=None, caused_versions = ["and_hm_or_ws_cc"], enabled_versions = ["or_ws"], aspect_version="modified")

@@ -31,6 +31,7 @@ If necessary, uncomment the following lines and run this code block to install p
 # install.packages("egg") # for geom_custom()
 # install.packages("grid")
 # install.packages("brms")
+# install.packages("Metrics")
 ```
 
 To render all output file formats, knit the file by running:
@@ -49,6 +50,7 @@ library("jpeg")
 library("egg") # for geom_custom()
 library("grid")
 library("brms")
+library("Metrics")
 ```
 
 ```{r set-theme}
@@ -72,7 +74,7 @@ dbDisconnect(con)
 # filter out incompletes 
 df_data = df_data %>%
   filter(status %in% 3:5) %>%
-  # filter(!str_detect(uniqueid, "debug")) %>%
+  filter(!str_detect(mode, "debug")) %>%
   filter(codeversion %in% c("forced_choice_2"))
 ```
 
@@ -205,12 +207,83 @@ df_agg = df_agg %>%
   group_by(trial, description) %>%
   mutate(data_y = count / sum(count)) %>%
   ungroup() %>%
-  select(trial, description, response, data_y) %>%
+  select(trial, response, data_y) %>%
   mutate(trial = as.integer(trial),
-         description = as.factor(description))
+         response = factor(response,
+                           levels = c("no_difference",
+                                      "affect",
+                                      "enable",
+                                      "cause"),
+                           labels = c("N", "A", "E", "C")))
 ```
 
 # Model
+```{r load-model}
+df_model = read.csv("../python/useful_csvs/top_models.csv") %>% 
+  select(-X) %>% 
+  mutate(response = factor(response,
+                           levels = c("no_difference",
+                                      "affect",
+                                      "enable",
+                                      "cause"),
+                           labels = c("N", "A", "E", "C")),
+         caused_version = ifelse(caused_version == "and_hm_or_ws",
+                                 "normal",
+                                 "cc"),
+         lesion_rsa = ifelse(lesion_rsa,
+                             "lesion",
+                             "full"))
+```
+
+
+Reported models are cc full (combined cause with pragmatics) and normal lesion (no combined cause without pragmatics)
+```{r print-summary-statistics-for-top-models}
+
+df_model_v_data = df_model %>% 
+  left_join(df_agg, by = c("trial", "response")) %>% 
+  group_by(caused_version, lesion_rsa) %>% 
+  summarise(r = cor(data_y, model_y),
+            RMSE = rmse(data_y, model_y)) 
+
+df_model_v_data %>%
+  mutate_if(is.numeric, round, 2)
+
+```
+
+```{r cross-validation-full-and-no-pragmatics}
+
+crossv_full = read.csv("../python/useful_csvs/cross_validation_full_model.csv") %>% 
+  select(-X)
+
+crossv_lesion = read.csv("../python/useful_csvs/cross_validation_lesion_model.csv") %>% 
+  select(-X)
+
+df_split_models = rbind(crossv_full, crossv_lesion) %>% 
+  mutate(lesion_rsa = ifelse(lesion_rsa, "lesion", "full"))
+
+df_split_performance = df_split_models %>% 
+  group_by(lesion_rsa, split, use) %>% 
+  summarise(r = cor(data_val, model_pred),
+            RMSE = rmse(data_val, model_pred)) %>% 
+  ungroup()
+
+df_crossval_summary = df_split_performance %>% 
+  filter(use == "test") %>% 
+  group_by(lesion_rsa) %>% 
+  summarise(med = median(r),
+            quan_5 = sort(r)[[5]],
+            quan_95 = sort(r, decreasing = TRUE)[[5]]) %>% 
+  mutate_if(is.numeric, round, 2)
+
+df_crossval_summary
+
+```
+
+
+```{r}
+
+```
+
 
 The RSA model results are in `causal_language_public/python/forced_choice_expt_rsa.csv`. This file is produced by running `causal_language_public/python/forced_choice_expt_rsa.py`.
 
