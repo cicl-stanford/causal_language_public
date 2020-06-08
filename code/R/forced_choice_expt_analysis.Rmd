@@ -279,8 +279,123 @@ df_crossval_summary
 
 ```
 
+## Bayesian Regression
+Code to train regression. Re-training the regressions
+from scratch takes a fair bit of time. So training is
+commented out. Remove comments to retrain. Currently
+Models are saved in regression subfolder. brm will
+reload the models rather than retrain (given the same
+file names). Move them to retrain models
+```{r train-regressions}
+unoise_range = c(0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6)
 
-```{r}
+
+df_aspects = read.csv("../python/useful_csvs/aspect_dataframe.csv") %>%
+  select(-X)
+
+df_full_data = df_long %>% 
+  select(participant, trial, response)
+
+
+# for (unoise in unoise_range) {
+# 
+#   df_aspects_given_noise = df_aspects %>%
+#     filter(uncertainty_noise == unoise)
+# 
+#   df_aspects_data = left_join(df_aspects_given_noise,
+#                               df_full_data,
+#                               by = c("trial")) %>% 
+#     mutate(response = factor(response,
+#                              levels = c("no_difference",
+#                                         "affect",
+#                                         "enable",
+#                                         "cause"),
+#                              ordered = TRUE))
+#   
+#   if (unoise == 1) {
+#     unoise = "1.0"
+#   }
+#     
+#   filename = paste("regression/random_intercepts_noise_", unoise,
+#                    sep = "")
+#   
+#   brm(formula = response ~ whether + how + sufficient + moving + (1 | participant),
+#       data = df_aspects_data,
+#       family = "cumulative",
+#       file = filename,
+#       seed = 1)
+#   
+# }
+
+
+
+```
+
+
+
+```{r predict-with-regressions}
+unoise_range = c(0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6)
+
+
+df_aspects = read.csv("../python/useful_csvs/aspect_dataframe.csv") %>%
+  select(-X)
+
+reg_list = list()
+
+i = 1
+for (unoise in unoise_range) {
+  df_aspects_given_noise = df_aspects %>%
+    filter(uncertainty_noise == 0.5)
+
+  filename = "regression/random_intercepts_noise_0.5.rds"
+
+  reg = readRDS(filename)
+
+  set.seed(1)
+
+  df_reg_pred = as.data.frame(fitted(reg,
+                                    newdata = df_aspects_given_noise,
+                                    re_formula = NA)[1:30,1,]) %>% 
+    rename(no_difference = 1,
+           affect = 2,
+           enable = 3,
+           cause = 4) %>% 
+    mutate(noise = 0.5,
+           trial = seq(0,29)) %>% 
+    pivot_longer(-c("trial", "noise"),
+                 names_to = "response",
+                 values_to = "model_y")
+  
+  reg_list[[i]] = df_reg_pred
+  i = i + 1
+}
+
+df_reg_pred = bind_rows(reg_list) %>% 
+  mutate(response = factor(response,
+                           levels = c("no_difference",
+                                      "affect",
+                                      "enable",
+                                      "cause")))
+
+
+```
+
+
+```{r evaluate-regressions}
+
+df_agg = df_agg %>% 
+  mutate(response = factor(response,
+                           levels = c("N",
+                                      "A",
+                                      "E",
+                                      "C"),
+                           labels = c("no_difference",
+                                      "affect",
+                                      "enable",
+                                      "cause")))
+
+# df_reg_pred = df_reg_pred %>% 
+#   left_join(df_agg, by = c("trial", "response"))
 
 ```
 
