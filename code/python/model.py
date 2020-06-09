@@ -759,7 +759,7 @@ def sufficient_test(trial, candidate, target, alternatives, noise, num_samples, 
 	info_cf_cont = []
 	# Collect all noise additions from the candidate and alternatives
 	noise_add_cont = collision_chain(events['collisions'], {candidate}, -1) + filtered_noise
-	# filter out anything noise application that isn't the target (since the target
+	# filter out any noise application that isn't the target (since the target
 	# is the only body left) and add the first if one exists
 	noise_add_cont = [x for x in noise_add_cont if x[0] == target]
 	# Multiple things could have hit the target in separate chains

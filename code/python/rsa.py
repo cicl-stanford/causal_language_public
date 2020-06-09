@@ -249,7 +249,9 @@ def softmax(arr, ax, beta=1):
   exp_arr = np.exp(beta*arr)
   return exp_arr/np.sum(exp_arr, axis=ax)
 
-# Compute lesion model outputs 
+# Compute lesion model outputs.
+# Requires aspect values for primary object and alternatives, (to be passed down to meaning)
+# Requires all other model parameters other than uncertainty noise (implicit in the aspect values)
 def lesion_model(primary_aspect_values, caused_version, enabled_version, how_not_affect_param, stationary_softener, beta, comparison_threshold=None, comparison_softener=None, alternative_aspect_values=None):
   semantic_values = np.vstack([meaning(word, primary_aspect_values, caused_version, enabled_version, how_not_affect_param, stationary_softener, comparison_threshold=comparison_threshold, comparison_softener=comparison_softener, alternative_aspect_values=alternative_aspect_values) for word in vocabulary])
   semantic_values = softmax(semantic_values, 0, beta=beta)

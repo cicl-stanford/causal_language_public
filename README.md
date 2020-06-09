@@ -1,6 +1,6 @@
 # Causal Language
 
-This is code for Beller et al. (submitted).
+This is code for Beller, Bennett, and Gerstenberg (2020).
 
 ## Reproduce paper results
 
@@ -21,10 +21,10 @@ pip:
 * pygame==1.9.6
 * pymunk
 
-1. Generate aspects. This runs the whether, how, and sufficiency tests accross samples of counterfactual simulations. Output will be saved to `code/python/aspects/`. Note that the generated aspects from the paper are already included in this repo in `code/python/aspects_paper`.
+1. Compute aspect representation. This runs the whether, how, and sufficiency tests accross samples of counterfactual simulations. Output will be saved to `code/python/aspects/`. Note that the generated aspects from the paper are already included in this repo in `code/python/aspects_paper`.
 
         cd code/python/
-        python aspect_generator.py --i trialinfo/experiment_trials.json --samples 1000 --uncertainty_noise 1.5
+        python compute_aspect_rep.py <uncertainty_noise> <num_samples>
 
 2. Run RSA pragmatics model. Note the parameters are set to the optimal ones found in the paper. To fit model parameters, change the lines commented with "PARAM SEARCH"
 
