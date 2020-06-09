@@ -431,78 +431,55 @@ beta_range = np.arange(1,15,0.5)
 
 
 ############################## Run grid search on best full and no prag model #################################
-np.random.seed(1)
+# np.random.seed(1)
 
-# Generate and save splits
-splits = generate_splits(trials, 100)
+# # Generate and save splits
+# splits = generate_splits(trials, 100)
 
-df_splits = pd.DataFrame({"train": [spl[0] for spl in splits], "test": [spl[1] for spl in splits]})
-df_splits.to_csv("useful_csvs/crossv_splits.csv")
+# df_splits = pd.DataFrame({"train": [spl[0] for spl in splits], "test": [spl[1] for spl in splits]})
+# df_splits.to_csv("useful_csvs/crossv_splits.csv")
 
-# Run grid search for full model. Write opt model for each split to file
-start_time = time.time()
-full = cross_validation(splits, 0, unoise_range, not_affect_param_range, stationary_softener_range, speaker_optimality_range, beta_range, caused_version="and_hm_or_ws_cc", enabled_version="or_ws", save_models=True)
-end_time = time.time()
+# # Run grid search for full model. Write opt model for each split to file
+# start_time = time.time()
+# full = cross_validation(splits, 0, unoise_range, not_affect_param_range, stationary_softener_range, speaker_optimality_range, beta_range, caused_version="and_hm_or_ws_cc", enabled_version="or_ws", save_models=True)
+# end_time = time.time()
 
 
-print("Runtime:", end_time - start_time)
-print()
+# print("Runtime:", end_time - start_time)
+# print()
 
-# Run grid search for no pragmatics model. Write opt model for each split to file
-start_time = time.time()
-lesion = cross_validation(splits, 1, unoise_range, not_affect_param_range, stationary_softener_range, speaker_optimality_range, beta_range, caused_version="and_hm_or_ws", enabled_version="or_ws", save_models=True)
-end_time = time.time()
+# # Run grid search for no pragmatics model. Write opt model for each split to file
+# start_time = time.time()
+# lesion = cross_validation(splits, 1, unoise_range, not_affect_param_range, stationary_softener_range, speaker_optimality_range, beta_range, caused_version="and_hm_or_ws", enabled_version="or_ws", save_models=True)
+# end_time = time.time()
 
-print("Runtime:", end_time - start_time)
+# print("Runtime:", end_time - start_time)
 
 ######################## Finding enable and lesion best models ###############################
-# old_enb_sem_prag = grid_search(trials, lesion_rsa=0, unoise_range=unoise_range, not_affect_param_range=not_affect_param_range, stationary_softener_range=stationary_softener_range, speaker_optimality_range=speaker_optimality_range, beta_range=None, caused_versions = ["and_hm_or_ws_cc"], enabled_versions = ["or_ws"], aspect_version="modified")
+old_enb_sem_prag = grid_search(trials, lesion_rsa=0, unoise_range=unoise_range, not_affect_param_range=not_affect_param_range, stationary_softener_range=stationary_softener_range, speaker_optimality_range=speaker_optimality_range, beta_range=None, caused_version = "and_hm_or_ws_cc", enabled_version = "or_ws")
 
-# new_enb_sem_prag = grid_search(trials, lesion_rsa=0, unoise_range=unoise_range, not_affect_param_range=not_affect_param_range, stationary_softener_range=stationary_softener_range, speaker_optimality_range=speaker_optimality_range, beta_range=None, caused_versions = ["and_hm_or_ws_cc"], enabled_versions = ["or_ws_and_nh"], aspect_version="modified")
+new_enb_sem_prag = grid_search(trials, lesion_rsa=0, unoise_range=unoise_range, not_affect_param_range=not_affect_param_range, stationary_softener_range=stationary_softener_range, speaker_optimality_range=speaker_optimality_range, beta_range=None, caused_version = "and_hm_or_ws_cc", enabled_version = "or_ws_and_nh")
 
-# old_enb_sem_lesion = grid_search(trials, lesion_rsa=1, unoise_range=unoise_range, not_affect_param_range=not_affect_param_range, stationary_softener_range=stationary_softener_range, speaker_optimality_range=None, beta_range=beta_range, caused_versions = ["and_hm_or_ws"], enabled_versions = ["or_ws"], aspect_version="modified")
+old_enb_sem_lesion = grid_search(trials, lesion_rsa=1, unoise_range=unoise_range, not_affect_param_range=not_affect_param_range, stationary_softener_range=stationary_softener_range, speaker_optimality_range=None, beta_range=beta_range, caused_version = "and_hm_or_ws", enabled_version = "or_ws")
 
-# new_enb_sem_lesion = grid_search(trials, lesion_rsa=1, unoise_range=unoise_range, not_affect_param_range=not_affect_param_range, stationary_softener_range=stationary_softener_range, speaker_optimality_range=None, beta_range=beta_range, caused_versions = ["and_hm_or_ws"], enabled_versions = ["or_ws_and_nh"], aspect_version="modified")
+new_enb_sem_lesion = grid_search(trials, lesion_rsa=1, unoise_range=unoise_range, not_affect_param_range=not_affect_param_range, stationary_softener_range=stationary_softener_range, speaker_optimality_range=None, beta_range=beta_range, caused_version = "and_hm_or_ws", enabled_version = "or_ws_and_nh")
 
-# print("Old Enb prag model:")
-# print(old_enb_sem_prag)
-# print()
-# print("New Enb prag model:")
-# print(new_enb_sem_prag)
-# print()
-# print("Old Enb lesion model:")
-# print(old_enb_sem_lesion)
-# print()
-# print("New Enb lesion model:")
-# print(new_enb_sem_lesion)
-# print()
+print("Old Enb prag model:")
+print(old_enb_sem_prag)
+print()
+print("New Enb prag model:")
+print(new_enb_sem_prag)
+print()
+print("Old Enb lesion model:")
+print(old_enb_sem_lesion)
+print()
+print("New Enb lesion model:")
+print(new_enb_sem_lesion)
+print()
 
-# param_settings = [(old_enb_sem_prag, "or_ws", 0), (new_enb_sem_prag, "or_ws_and_nh", 0), (old_enb_sem_lesion, "or_ws", 1), (new_enb_sem_lesion, "or_ws_and_nh", 1)]
+models = [{'params': old_enb_sem_prag, 'lesion_rsa': 0, 'caused_version': "and_hm_or_ws_cc", 'enabled_version': "or_ws"}, {'params': new_enb_sem_prag, 'lesion_rsa': 0, 'caused_version': "and_hm_or_ws_cc", 'enabled_version': "or_ws_and_nh"}, {'params': old_enb_sem_lesion, 'lesion_rsa': 1, 'caused_version': "and_hm_or_ws", "enabled_version": "or_ws"}, {'params': new_enb_sem_lesion, 'lesion_rsa': 1, 'caused_version': "and_hm_or_ws", 'enabled_version': "or_ws_and_nh"}]
 
-# enb_comp_dict = {"lesion_rsa": [], "enabled_version": [], "trial": [], "response": [], "model_y": []}
-
-# for i in range(len(param_settings)):
-#   params, enabled_version, lesion_rsa = param_settings[i]
-#   primary_aspect_values, alternative_aspect_values = load_aspects(params['unoise'], aspect_version="modified")
-#   if not lesion_rsa:
-#     model_output = s2(primary_aspect_values, caused_version="and_hm_or_ws_cc", enabled_version=enabled_version, how_not_affect_param=params['not_affect_param'], stationary_softener=params['stationary_softener'], speaker_optimality=params['speaker_optimality'], alternative_aspect_values=alternative_aspect_values)
-#   else:
-#     model_output = lesion_model(primary_aspect_values, caused_version="and_hm_or_ws", enabled_version=enabled_version, how_not_affect_param=params['not_affect_param'], stationary_softener=params['stationary_softener'], beta=params['beta'], alternative_aspect_values=alternative_aspect_values)
-
-
-#   for trial in range(30):
-#     for j in range(len(vocabulary_dataset)):
-#       verb = vocabulary_dataset[j]
-
-#       enb_comp_dict['lesion_rsa'].append(lesion_rsa)
-#       enb_comp_dict['enabled_version'].append(enabled_version)
-#       enb_comp_dict['trial'].append(trial)
-#       enb_comp_dict['response'].append(verb)
-#       enb_comp_dict['model_y'].append(model_output[j,trial])
-
-# df_enb_comp = pd.DataFrame(enb_comp_dict)
-# df_enb_comp.to_csv('useful_csvs/enabled_definition.csv')
-
+save_model(models, output_file = "useful_csvs/enable_comparison.csv")
 
 
 ################### grid search for best combined cause model full trial set ######################

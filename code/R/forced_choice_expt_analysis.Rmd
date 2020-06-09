@@ -143,7 +143,7 @@ df_demographics %>%
 
 ## Get participant responses
 
-```{r Extract main data}
+```{r Extract main data, message=F}
 df_long = df_data$datastring %>% 
   as.tbl_json() %>% 
   enter_object("data") %>%
@@ -213,20 +213,22 @@ df_agg = df_agg %>%
                            levels = c("no_difference",
                                       "affect",
                                       "enable",
-                                      "cause"),
-                           labels = c("N", "A", "E", "C")))
+                                      "cause")))
 ```
 
 # Model
-```{r load-model}
+
+## Full Model and Lesion RSA
+
+### Paper Results
+```{r load-full-and-lesion-model}
 df_model = read.csv("../python/useful_csvs/top_models.csv") %>% 
   select(-X) %>% 
   mutate(response = factor(response,
                            levels = c("no_difference",
                                       "affect",
                                       "enable",
-                                      "cause"),
-                           labels = c("N", "A", "E", "C")),
+                                      "cause")),
          caused_version = ifelse(caused_version == "and_hm_or_ws",
                                  "normal",
                                  "cc"),
@@ -250,6 +252,7 @@ df_model_v_data %>%
 
 ```
 
+### Cross-Validation
 ```{r cross-validation-full-and-no-pragmatics}
 
 crossv_full = read.csv("../python/useful_csvs/cross_validation_full_model.csv") %>% 
@@ -271,8 +274,8 @@ df_crossval_summary = df_split_performance %>%
   filter(use == "test") %>% 
   group_by(lesion_rsa) %>% 
   summarise(med = median(r),
-            quan_5 = sort(r)[[5]],
-            quan_95 = sort(r, decreasing = TRUE)[[5]]) %>% 
+            perc_5 = sort(r)[[5]],
+            perc_95 = sort(r, decreasing = TRUE)[[5]]) %>% 
   mutate_if(is.numeric, round, 2)
 
 df_crossval_summary
@@ -286,6 +289,8 @@ commented out. Remove comments to retrain. Currently
 Models are saved in regression subfolder. brm will
 reload the models rather than retrain (given the same
 file names). Move them to retrain models
+
+### Paper Results
 ```{r train-regressions}
 unoise_range = c(0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6)
 
@@ -332,6 +337,35 @@ df_full_data = df_long %>%
 ```
 
 
+```{r write-training-set-for-each-noise-value-to-file}
+
+for (unoise in unoise_range) {
+  df_aspects_given_noise = df_aspects %>% 
+    filter(uncertainty_noise == unoise)
+  
+  
+  df_aspects_data = left_join(df_aspects_given_noise,
+                              df_full_data,
+                              by = c("trial")) %>%
+    mutate(response = factor(response,
+                             levels = c("no_difference",
+                                        "affect",
+                                        "enable",
+                                        "cause"),
+                             ordered = TRUE))
+  
+  filename = paste("aspect_matched_data/noise_",
+                   ifelse(unoise == 1, "1.0", unoise),
+                   ".csv",
+                   sep = "")
+  
+  write.csv(df_aspects_data, file = filename)
+  
+}
+
+```
+
+
 
 ```{r predict-with-regressions}
 unoise_range = c(0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6)
@@ -345,9 +379,13 @@ reg_list = list()
 i = 1
 for (unoise in unoise_range) {
   df_aspects_given_noise = df_aspects %>%
-    filter(uncertainty_noise == 0.5)
+    filter(uncertainty_noise == unoise)
 
-  filename = "regression/random_intercepts_noise_0.5.rds"
+  # filename = "regression/random_intercepts_noise_0.5.rds"
+  filename = paste("regression/random_intercepts_noise_",
+                   ifelse(unoise == 1, "1.0", unoise),
+                   ".rds",
+                   sep = "")
 
   reg = readRDS(filename)
 
@@ -360,7 +398,7 @@ for (unoise in unoise_range) {
            affect = 2,
            enable = 3,
            cause = 4) %>% 
-    mutate(noise = 0.5,
+    mutate(noise = unoise,
            trial = seq(0,29)) %>% 
     pivot_longer(-c("trial", "noise"),
                  names_to = "response",
@@ -378,202 +416,215 @@ df_reg_pred = bind_rows(reg_list) %>%
                                       "cause")))
 
 
+
 ```
 
 
+Choose best regression model and produce summary statistics
 ```{r evaluate-regressions}
 
-df_agg = df_agg %>% 
+df_reg_vs_data = df_reg_pred %>%
+  left_join(df_agg, by = c("trial", "response")) %>% 
+  mutate(sq_err = (model_y - data_y)^2)
+
+df_noise_sum = df_reg_vs_data %>% 
+  group_by(noise) %>% 
+  summarise(sum_sq_err = sum(sq_err))
+
+best_noise = df_noise_sum[df_noise_sum$sum_sq_err == min(df_noise_sum$sum_sq_err),]$noise[[1]]
+
+df_best_reg = df_reg_vs_data %>% 
+  filter(noise == best_noise)
+
+reg_summary = df_best_reg %>% 
+  summarise(r = cor(data_y, model_y), RMSE = rmse(data_y, model_y)) %>%
+  mutate_if(is.numeric, round, 2)
+
+reg_summary
+
+```
+
+
+### Cross-Validation
+For cross validation, we trained ordinal regressions for each noise
+value on each split. We took the best performing model for each split
+(assessed on the held out set), and saved the predictions of that
+model to file in the given split folder. The code for this process
+is in the crossv_ordreg.R script. We ran the code on Stanford's
+high-performance computing cluster Sherlock. It takes considerable
+computing resources to retrain the models from scratch, so we
+provide the pre-computed best performing models in the splits
+folder for convenience.
+
+If you would like to reproduce the training, you can run the 
+script from the command line with the following command:
+
+Rscript crossv_ordreg.R split_num
+
+where split_num is an integer from 1-100 designating the
+split to run and assess.
+
+In order to save time in cross validation, we ran the ordinal
+regression in cross validation without random intercepts for
+participants.
+
+
+```{r load-top-models-and-compute-summary-stats}
+
+model_list = list()
+
+for (i in seq(1,100)) {
+  filename = paste("splits/split",
+                   str_pad(i, 3, side = "left", pad = "0"),
+                   "/best_model.csv",
+                   sep = "")
+  
+  mod = read.csv(filename) %>% 
+    mutate(split = i)
+  
+  model_list[[i]] = mod
+}
+
+df_crossv_mod = bind_rows(model_list) %>% 
+  select(-X) %>% 
+  filter(half == "test")
+
+df_crossv_reg_split_performance = df_crossv_mod %>% 
+  group_by(split) %>% 
+  summarise(r = cor(model_y, data_y)) %>% 
+  ungroup()
+
+df_crossv_reg_sum_stat = df_crossv_reg_split_performance %>% 
+  summarise(med_r = median(r),
+            perc_5 = sort(r)[5],
+            perc_95 = sort(r, decreasing = TRUE)[5]) %>% 
+  mutate_if(is.numeric, round, 2)
+
+df_crossv_reg_sum_stat
+
+```
+
+
+## Enable Comparison
+```{r load-enable-comparison}
+
+df_enable_comparison = read.csv("../python/useful_csvs/enable_comparison.csv") %>% 
+  select(-X) %>% 
   mutate(response = factor(response,
-                           levels = c("N",
-                                      "A",
-                                      "E",
-                                      "C"),
-                           labels = c("no_difference",
+                           levels = c("no_difference",
                                       "affect",
                                       "enable",
-                                      "cause")))
+                                      "cause")),
+         lesion_rsa = ifelse(lesion_rsa, "lesion", "full"),
+         enabled_version = ifelse(enabled_version == "or_ws",
+                                  "normal",
+                                  "not how")) %>% 
+  left_join(df_agg, by = c("trial", "response"))
 
-# df_reg_pred = df_reg_pred %>% 
-#   left_join(df_agg, by = c("trial", "response"))
+df_enable_sum = df_enable_comparison %>% 
+  group_by(lesion_rsa, enabled_version) %>% 
+  summarise(r = cor(model_y, data_y), RMSE = rmse(model_y, data_y)) %>% 
+  mutate_if(is.numeric, round, 2)
+
+df_enable_sum
 
 ```
 
 
-The RSA model results are in `causal_language_public/python/forced_choice_expt_rsa.csv`. This file is produced by running `causal_language_public/python/forced_choice_expt_rsa.py`.
 
-```{r load model}
-df_model = read.csv("../python/forced_choice_expt_rsa.csv") %>%
-  # relabel responses to match experiment
-  mutate(response = recode(
-    utterance,
-    caused = "cause",
-    `didn't affect` = "no_difference",
-    affected = "affect",
-    enabled = "enable"
-  )) %>%
-  select(-utterance) %>%
-  rename(model_y = p) %>%
-  select(-X) %>%
-  mutate(model_label = paste(
-    paste("affected:", affected_version, sep=""),
-    paste("caused:", caused_version, sep=""),
-    paste("enabled:", enabled_version, sep=""),
-    paste("notaffected:", not_affect_version, sep=""),
-    paste("uncertainty_noise:",uncertainty_noise, sep=""),
-    paste("speaker_opt:", speaker_optimality, sep=""),
-    paste("box_alternative:", box_alternative, sep=""),
-    paste("lesion_rsa:", lesion_rsa, sep=""),
-    paste("beta:", beta, sep=""),
-    paste("stationary_softener:", stationary_softener, sep=""),
-    paste("how_not_affect_param:", how_not_affect_param, sep = ""),
-    sep=" ~ ")) %>%
-  mutate(model_label_multiline = paste(
-    paste("affected:", affected_version, sep=""),
-    paste("caused:", caused_version, sep=""),
-    paste("enabled:", enabled_version, sep=""),
-    paste("notaffected:", not_affect_version, sep=""),
-    paste("uncertainty_noise:",uncertainty_noise, sep=""),
-    paste("speaker_opt:", speaker_optimality, sep=""),
-    paste("box_alternative:", box_alternative, sep=""),
-    paste("lesion_rsa:", lesion_rsa, sep=""),
-    paste("beta:", beta, sep=""),
-    paste("how_not_affect_param:", how_not_affect_param, sep = ""),
-    sep="\n"))
+# Plots
+
+```{r collect-best-models}
+
+df_full = df_model %>% 
+  filter(caused_version == "cc",
+         lesion_rsa == "full") %>% 
+  mutate(model_label_short = "Full Model") %>% 
+  select(trial, response, model_y, model_label_short)
+
+df_no_prag = df_model %>%
+  filter(caused_version == "normal",
+         lesion_rsa == "lesion") %>% 
+  mutate(model_label_short = "No Pragmatics") %>% 
+  select(trial, response, model_y, model_label_short)
+
+
+df_ord_reg = df_best_reg %>% 
+  mutate(model_label_short = "Ordinal Regression") %>% 
+  select(trial, response, model_y, model_label_short)
+
+
+best_models_all = rbind(df_full, df_no_prag, df_ord_reg)
+
+
 ```
 
-```{r Combine model and data}
-model_v_data_wide = merge(
-  df_agg %>%
-    filter(trial != 31, trial != 30),
-  df_model %>%
-    filter(trial != 31, trial != 30),
-  all=T) %>%
-  mutate(data_y = ifelse(is.na(data_y), 0, data_y)) %>%
-  mutate(error = model_y - data_y)
-```
+```{r add-error-bars-to-df-agg}
 
-```{r Using sum sq error to choose best models}
-vocab = unique(model_v_data_wide$response)
-model_errors = suppressWarnings(
-  model_v_data_wide %>%
-    group_by(lesion_rsa, not_affect_version, caused_version, model_label, trial) %>%
-    summarise(sum_sq_error = sum((error)^2)) %>%
-  group_by(lesion_rsa, not_affect_version, caused_version, model_label) %>%
-    summarise(sum_sq_error = sum(sum_sq_error)) %>%
-  arrange(sum_sq_error))
-model_errors_without_movement = model_errors %>%
-  filter(caused_version == "and_h_or_ws")
-model_errors = model_errors %>%
-  filter(caused_version == "and_hm_or_ws")
-```
-
-## Bayesian Ordinal Regression
-
-Regression results are in the directory `causal_language_public/regression/`.
-
-```{r Wrangle data for regression}
-df_aspects = model_v_data_wide %>% 
-  filter(uncertainty_noise == 1.4) %>% 
-  select(trial, whether, how, sufficient, moving) %>%
-  unique() %>%
-  arrange(trial)
-
-df_aspects_data = df_long %>%
-  filter(!is_attention_check,
-         !is_excluded_participant) %>% 
-  left_join(df_aspects, by = c("trial")) %>% 
-  select(participant, trial, response, whether, how, sufficient, moving) %>%
-  mutate(response = factor(response, levels = c("no_difference", "affect", "enable", "cause"), ordered = TRUE))
-```
-
-```{r Ordinal regression}
-# # Commented out because it takes a long time to run
-# reg = brm(formula = response ~ whether + how + moving,
-#           data = df_aspects_data,
-#           family = "cumulative",
-#           file = "regression/ord_reg_no_flip_stationary",
-#           seed = 1)
-```
-
-```{r Ordinal regression with movement feature}
-# # Commented out because it takes a long time to run
-# reg_with_movement = brm(formula = response ~ whether + how + sufficient + moving,
-#           data = df_aspects_data,
-#           family = "cumulative",
-#           file = "regression/ord_reg_no_stationary",
-#           seed = 1)
-```
-
-```{r Compare-the-regression-predictions-to-the-data with movement feature}
-reg = readRDS("regression/ord_reg_noise_1.6.rds")
-
-set.seed(1)
-
-mat_reg_pred =
-  predict(
-    reg,
-    newdata = df_aspects %>% mutate(stationary = moving)
-  )
-
-df_reg_pred =
-  as.data.frame(
-    predict(
-      reg,
-      newdata = df_aspects %>% mutate(stationary = moving)
+count_with_ci = function(df, var) {
+  y =
+    df %>%
+    group_by(trial, description) %>%
+    count({{var}}, name = y, .drop = FALSE)
+  resampled_counts =
+    map_dfr(
+      1:100,
+      function(i) {
+        df %>%
+        mutate(response = sample({{var}}, replace = TRUE)) %>%
+        count(response, .drop = FALSE)
+      }
+    ) %>%
+    group_by(trial, description, response) %>%
+    summarise(
+      ymin = quantile(n, probs = 0.025),
+      ymax = quantile(n, probs = 0.975)
     )
-  ) %>% 
-  rename(no_difference = "P(Y = no_difference)",
-         affect = "P(Y = affect)",
-         enable = "P(Y = enable)",
-         cause = "P(Y = cause)") %>% 
-  mutate(trial = seq(0,29)) %>% 
-  gather(key = response, value = model_y, -trial) %>% 
-  arrange(trial, response) %>%
-  left_join(df_agg, by = c("trial", "response")) %>% 
-  select(-description) %>% 
-  mutate(error = model_y - data_y)
+  # y %>% left_join(resampled_counts, by = c("trial", "description", "response"))
+}
+
+# Already filtered for excluded participants and removed attention check
+# df_long = read_csv("../python/useful_csvs/data.csv") %>% 
+#   select(-X1)
+
+df_actual =
+  df_long %>%
+  mutate(response = factor(response,
+                           levels = c("no_difference",
+                                      "affect",
+                                      "enable",
+                                      "cause"))) %>% 
+  filter(trial != 30)
+
+df_agg =
+  map_dfr(
+    1:1000,
+    function(i) {
+      df_actual %>%
+        group_by(trial) %>%
+        mutate(response = sample(response, replace = TRUE)) %>%
+        count(response, .drop = FALSE) %>%
+        mutate(n = n / sum(n))
+    }
+  ) %>%
+  group_by(trial, response) %>%
+  summarise(
+    data_ymin = quantile(n, probs = 0.025),
+    data_ymax = quantile(n, probs = 0.975)
+  ) %>%
+  left_join(
+    df_actual %>%
+      group_by(trial) %>%
+      count(response, name = "data_y", .drop = FALSE) %>%
+      mutate(data_y = data_y / sum(data_y)),
+    by = c("trial", "response")
+  ) %>%
+  ungroup()
 ```
 
-# Best Models
 
-## With movement feature
 
-```{r select semantics models, fig.width=15, fig.height=5}
-best_model_labels = model_errors %>%
-  group_by(lesion_rsa) %>%
-  summarise(model_label = model_label[[1]]) %>%
-  ungroup() %>%
-  pull(model_label)
-best_models = model_v_data_wide %>%
-  filter(model_label %in% best_model_labels) %>%
-  mutate(model_label_short = if_else(lesion_rsa == "1", "No Pragmatics", "Full Model"))
-```
-
-```{r}
-# best_model_labels
-```
-
-```{r}
-best_models_all = best_models %>%
-  select(trial, response, data_y, model_y, model_label_short) %>%
-  rbind(
-    df_reg_pred %>%
-      mutate(model_label_short = "Ordinal Regression") %>%
-      select(trial, response, data_y, model_y, model_label_short)
-  )
-```
-
-```{r summarize-model-statistics}
-best_models_all %>%
-  group_by(model_label_short) %>%
-  summarise(R = cor(model_y, data_y), RMSE = Metrics::rmse(model_y, data_y)) %>%
-  knitr::kable()
-```
-
-### Plots
-
-```{r sample cases, fig.width=15, fig.height=5}
+```{r sample cases, fig.width=15, fig.height=6}
 sample_cases = c(12, 18, 2, 22, 6, 7, 14, 15)
 words = c("no_difference", "affect", "enable", "cause")
 labels = c("N", "A", "E", "C")
@@ -593,7 +644,7 @@ df.model = best_models_all %>%
                            levels = words,
                            labels = labels))
 func_load_image = function(clip){
-  readJPEG(str_c("../../figures/forced_choice_expt_diagrams/trial", clip, ".jpeg"))
+  readJPEG(str_c("../../figures/trial_schematics/trial", clip, ".jpeg"))
 }
 df.clips = df.plot %>% 
   distinct(trial, Clip) %>% 
@@ -612,6 +663,10 @@ p = ggplot(data = df.plot,
              size = 3,
              position = position_dodge(0.8),
              color = "black") +
+  geom_errorbar(
+    mapping = aes(ymin = data_ymin, ymax = data_ymax),
+    width = 0
+  ) +
   geom_custom(data = df.clips,
               mapping = aes(data = grob, x = 2.5, y = Inf),
               grob_fun = function(x) rasterGrob(x,
@@ -642,6 +697,9 @@ ggsave("../../figures/paper_plots/cogsci_bar_model_cases.pdf",
 ```
 
 ```{r scatter, fig.width=15, fig.height=5}
+
+best_models_all = left_join(best_models_all, df_agg, by = c("trial", "response"))
+
 df.plot = best_models_all %>%
   rename(Model = model_label_short) %>% 
   mutate(response = factor(response,
@@ -673,6 +731,11 @@ ggplot(data = df.plot,
             mapping = aes(label = label),
             hjust = 0,
             size = 8) + 
+  geom_errorbar(mapping = aes(ymin = data_ymin,
+                              ymax = data_ymax),
+                alpha = 0.6,
+                width = 0,
+                show.legend = FALSE) +
   geom_point(mapping = aes(fill = response,
                            shape = response),
              alpha = 0.8,
@@ -700,12 +763,12 @@ Automatically generate example tables for walking through RSA model.
 Aspects:
 
 ```{r}
+
+df_sample_aspects = df_aspects %>% 
+  filter(uncertainty_noise == 1.0)
+
 sample_cases_aspects <-
-  model_v_data_wide %>%
-  filter(
-    model_label %in% best_model_labels,
-    lesion_rsa == "0"
-  ) %>%
+  df_sample_aspects %>%
   filter(trial %in% sample_cases[1:4]) %>%
   mutate(trial = factor(trial, levels = sample_cases[1:4])) %>%
   group_by(trial, how, whether, sufficient) %>%
@@ -843,60 +906,4 @@ sample_cases_s1 %>%
 #   tabl = str_c(tabl, " \\\\ \n")
 # }
 # writeLines(tabl)
-```
-
-## Without movement feature
-
-
-
-```{r Compare-the-regression-predictions-to-the-data without movement feature}
-reg_without_movement = readRDS("regression/ord_reg_no_stationary_noise_1.6.rds")
-
-set.seed(1)
-
-mat_reg_pred_without_movement = predict(reg_without_movement, newdata = df_aspects)
-
-df_reg_pred_without_movement = as.data.frame(predict(reg_without_movement, newdata = df_aspects)) %>% 
-  rename(no_difference = "P(Y = no_difference)",
-         affect = "P(Y = affect)",
-         enable = "P(Y = enable)",
-         cause = "P(Y = cause)") %>% 
-  mutate(trial = seq(0,29)) %>% 
-  gather(key = response, value = model_y, -trial) %>% 
-  arrange(trial, response) %>%
-  left_join(df_agg, by = c("trial", "response")) %>% 
-  select(-description) %>% 
-  mutate(error = model_y - data_y)
-```
-
-```{r select semantics models with movement feature, fig.width=15, fig.height=5}
-best_model_labels_without_movement = model_errors_without_movement %>%
-  group_by(lesion_rsa) %>%
-  summarise(model_label = model_label[[1]]) %>%
-  ungroup() %>%
-  pull(model_label)
-best_models_without_movement = model_v_data_wide %>%
-  filter(model_label %in% best_model_labels_without_movement) %>%
-  mutate(model_label_short = if_else(lesion_rsa == "1", "No Pragmatics", "Full Model"))
-```
-
-```{r}
-# best_model_labels_without_movement
-```
-
-```{r}
-best_models_all_without_movement = best_models_without_movement %>%
-  select(trial, response, data_y, model_y, model_label_short) %>%
-  rbind(
-    df_reg_pred_without_movement %>%
-      mutate(model_label_short = "Ordinal Regression") %>%
-      select(trial, response, data_y, model_y, model_label_short)
-  )
-```
-
-```{r summarize-model-statistics with movement feature}
-best_models_all_without_movement %>%
-  group_by(model_label_short) %>% 
-  summarise(R = cor(model_y, data_y), RMSE = Metrics::rmse(model_y, data_y)) %>%
-  knitr::kable()
 ```
