@@ -75,7 +75,7 @@ Plots presented in the paper.
 
 Single frame depictions of the trial clips.
 
-#### videos
+### videos
 
 Video clips presented to participants in the experiment.
 
