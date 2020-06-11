@@ -21,15 +21,15 @@ pip:
 * pygame==1.9.6
 * pymunk
 
-1. Compute aspect representation. This runs the whether, how, and sufficiency tests accross samples of counterfactual simulations. Output will be saved to `code/python/aspects/`. Note that the generated aspects from the paper are already included in this repo in `code/python/aspects_paper`.
+1. Compute aspect representation. This runs the whether, how, sufficiency, and moving tests accross samples of counterfactual simulations. Output will be saved to `code/python/aspects/`. Note that the generated aspects from the paper are already included in this repo in `code/python/aspects_paper`. Downstream model components read from `aspects_paper`, but paths can be modified. 
 
         cd code/python/
         python compute_aspect_rep.py <uncertainty_noise> <num_samples>
 
-2. Run RSA pragmatics model. Note the parameters are set to the optimal ones found in the paper. To fit model parameters, change the lines commented with "PARAM SEARCH"
+2. To compute and save models for reported paper statistics use the top_models.py script. top_models.py produces 4 csvs in the useful_csvs folder. The first top_models.csv contains model predictions for the top full model and no pragmatics model (as well as comparisons with and without combined cause respectively). The second and third are the cross_validation_full_model.csv and the cross_validation_lesion_model.csv which contain model predictions for for cross validation models trained and tested on the splits specified in crossv_splits.csv. Lastly, the final csv is the enabled_comparison.csv, which contains predictions for models with and without the "not how" semantics for the "enabled" causal expression.
 
         cd code/python/
-        python forced_choice_expt_rsa.py
+        python top_models.py
 
 3. In RStudio, install packages as needed and then knit `forced_choice_expt_analysis.Rmd` to remake all plots and compute reported statistics. The compiled file `forced_choice_expt_analysis.md` contains all findings reported in the paper.
 
