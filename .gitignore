@@ -1,5 +1,6 @@
 .DS_Store
-# code/python/__pycache__
-# code/python/__pycache__/*
-# *.pyc
-# code/python/__pycache__/
+# overzealous attempts to exclude pycache
+code/python/__pycache__
+code/python/__pycache__/*
+*.pyc
+code/python/__pycache__/
