@@ -48,7 +48,7 @@ Contains code for model analysis and as well as training, prediction, and cross-
 
 #### bash
 
-1. combine_frames.sh takes a set of frames saved in code/python/figures/frames and produces a video clip saved in code/python/video. Requires experiment name and trial number as command line arguments e.g.
+` combine_frames.sh` takes a set of frames saved in code/python/figures/frames and produces a video clip saved in code/python/video. Requires experiment name and trial number as command line arguments e.g.
 
 `./combine_frames.sh exp_name 5`
 
