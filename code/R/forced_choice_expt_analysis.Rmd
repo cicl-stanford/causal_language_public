@@ -2,7 +2,7 @@
 title: "Causal Language Forced-Choice Experiment Analysis"
 author: "Erin Bennett and Ari Beller"
 output:
-  github_document:
+  html_document:
     toc: true
 ---
 
@@ -483,7 +483,7 @@ model_list = list()
 for (i in seq(1,100)) {
   filename = paste("splits/split",
                    str_pad(i, 3, side = "left", pad = "0"),
-                   "/best_model.csv",
+                   "_bestmodel.csv",
                    sep = "")
   
   mod = read.csv(filename) %>% 
