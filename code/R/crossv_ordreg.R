@@ -45,7 +45,8 @@ for (i in seq(1,length(unoise_range))) {
 
   train_data = data %>% filter(trial %in% train_trials)
 
-  filename = paste("splits/split", str_pad(split_num, 3, side = "left", pad = "0"), "/ord_reg_noise_", unoise, ".rds", sep = "")
+  filename = paste("splits/ord_reg_noise_", unoise, ".rds",
+                   sep = "")
 
   if (i == 1) {
 
@@ -114,7 +115,7 @@ print(best_noise)
 
 best_model = model_comp %>% filter(uncertainty_noise == best_noise)
 
-filename = paste("splits/split", str_pad(split_num, 3, side = "left", pad = "0"), "/best_model.csv", sep = "")
+filename = paste("splits/split", str_pad(split_num, 3, side = "left", pad = "0"), "_bestmodel.csv", sep = "")
 
 write.csv(best_model, filename)
 

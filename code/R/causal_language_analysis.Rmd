@@ -110,7 +110,7 @@ df_demographics %>%
 
 ## Get participant responses
 
-```{r Extract main data, warning=FALSE}
+```{r Extract-main-data, warning=FALSE}
 df_long = df_data$datastring %>% 
   as.tbl_json() %>% 
   enter_object("data") %>%
