@@ -1,6 +1,6 @@
 # Causal Language
 
-This is code for Beller*, Bennett*, and Gerstenberg (2020). For any questions about the repo, feel free to contact Ari Beller at abeller@stanford.edu
+This repo contains the materials of the paper "Beller*, Bennett* & Gerstenberg (2020) The language of causation". For any questions about the repo, feel free to contact Ari Beller at abeller@stanford.edu
 
 ## Repository Structure
 
