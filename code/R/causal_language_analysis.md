@@ -16,6 +16,7 @@ Erin Bennett, Ari Beller, Tobias Gerstenberg
       - [Enable Comparison](#enable-comparison)
   - [Plots](#plots)
       - [Tables](#tables)
+  - [Session info](#session-info)
 
 # Load packages
 
@@ -884,3 +885,65 @@ sample_cases_s1 %>%
 | 18    |    2 |   0.0 |   1.00 | 0.0000000 | 0.0000000 |
 | 2     |    3 |   0.0 |   0.00 | 0.5294118 | 0.4705882 |
 | 22    |    4 |   0.0 |   0.00 | 0.0000000 | 1.0000000 |
+
+# Session info
+
+    #> R version 3.6.3 (2020-02-29)
+    #> Platform: x86_64-apple-darwin15.6.0 (64-bit)
+    #> Running under: macOS Catalina 10.15.5
+    #> 
+    #> Matrix products: default
+    #> BLAS:   /Library/Frameworks/R.framework/Versions/3.6/Resources/lib/libRblas.0.dylib
+    #> LAPACK: /Library/Frameworks/R.framework/Versions/3.6/Resources/lib/libRlapack.dylib
+    #> 
+    #> locale:
+    #> [1] en_US.UTF-8/en_US.UTF-8/en_US.UTF-8/C/en_US.UTF-8/en_US.UTF-8
+    #> 
+    #> attached base packages:
+    #> [1] grid      stats     graphics  grDevices utils     datasets  methods  
+    #> [8] base     
+    #> 
+    #> other attached packages:
+    #>  [1] forcats_0.5.0   stringr_1.4.0   dplyr_1.0.0     purrr_0.3.4    
+    #>  [5] readr_1.3.1     tidyr_1.1.0     tibble_3.0.1    tidyverse_1.3.0
+    #>  [9] knitr_1.28      Metrics_0.1.4   brms_2.13.0     Rcpp_1.0.4.6   
+    #> [13] egg_0.4.5       ggplot2_3.3.1   gridExtra_2.3   jpeg_0.1-8.1   
+    #> [17] tidyjson_0.3.1  rjson_0.2.20    lubridate_1.7.9 RSQLite_2.2.0  
+    #> 
+    #> loaded via a namespace (and not attached):
+    #>   [1] colorspace_1.4-1     ellipsis_0.3.1       ggridges_0.5.2      
+    #>   [4] rsconnect_0.8.16     estimability_1.3     markdown_1.1        
+    #>   [7] fs_1.4.1             base64enc_0.1-3      rstudioapi_0.11     
+    #>  [10] farver_2.0.3         rstan_2.19.3         DT_0.13             
+    #>  [13] bit64_0.9-7          fansi_0.4.1          mvtnorm_1.1-1       
+    #>  [16] xml2_1.3.2           splines_3.6.3        bridgesampling_1.0-0
+    #>  [19] shinythemes_1.1.2    bayesplot_1.7.2      jsonlite_1.6.1      
+    #>  [22] broom_0.7.0.9000     dbplyr_1.4.4         shiny_1.4.0.2       
+    #>  [25] compiler_3.6.3       httr_1.4.1           emmeans_1.4.7       
+    #>  [28] backports_1.1.7      assertthat_0.2.1     Matrix_1.2-18       
+    #>  [31] fastmap_1.0.1        cli_2.0.2            later_1.1.0.1       
+    #>  [34] htmltools_0.4.0      prettyunits_1.1.1    tools_3.6.3         
+    #>  [37] igraph_1.2.5         coda_0.19-3          gtable_0.3.0        
+    #>  [40] glue_1.4.1           reshape2_1.4.4       cellranger_1.1.0    
+    #>  [43] vctrs_0.3.1          nlme_3.1-144         crosstalk_1.1.0.1   
+    #>  [46] xfun_0.14            ps_1.3.3             rvest_0.3.5         
+    #>  [49] mime_0.9             miniUI_0.1.1.1       lifecycle_0.2.0     
+    #>  [52] gtools_3.8.2         zoo_1.8-8            scales_1.1.1        
+    #>  [55] colourpicker_1.0     hms_0.5.3            promises_1.1.1      
+    #>  [58] Brobdingnag_1.2-6    parallel_3.6.3       inline_0.3.15       
+    #>  [61] RColorBrewer_1.1-2   shinystan_2.5.0      yaml_2.2.1          
+    #>  [64] memoise_1.1.0        loo_2.2.0            StanHeaders_2.21.0-5
+    #>  [67] stringi_1.4.6        highr_0.8            dygraphs_1.1.1.6    
+    #>  [70] pkgbuild_1.0.8       rlang_0.4.6          pkgconfig_2.0.3     
+    #>  [73] matrixStats_0.56.0   evaluate_0.14        lattice_0.20-38     
+    #>  [76] labeling_0.3         rstantools_2.1.0     htmlwidgets_1.5.1   
+    #>  [79] bit_1.1-15.2         processx_3.4.2       tidyselect_1.1.0    
+    #>  [82] plyr_1.8.6           magrittr_1.5         R6_2.4.1            
+    #>  [85] generics_0.0.2       DBI_1.1.0            mgcv_1.8-31         
+    #>  [88] pillar_1.4.4         haven_2.3.1          withr_2.2.0         
+    #>  [91] xts_0.12-0           abind_1.4-5          modelr_0.1.8        
+    #>  [94] crayon_1.3.4         utf8_1.1.4           rmarkdown_2.2       
+    #>  [97] readxl_1.3.1         blob_1.2.1           callr_3.4.3         
+    #> [100] threejs_0.3.3        reprex_0.3.0         digest_0.6.25       
+    #> [103] xtable_1.8-4         httpuv_1.5.4         RcppParallel_5.0.1  
+    #> [106] stats4_3.6.3         munsell_0.5.0        shinyjs_1.1

@@ -793,3 +793,9 @@ sample_cases_s1 %>%
   kable()
 
 ```
+
+# Session info
+
+```{r, echo=F}
+sessionInfo()
+```
