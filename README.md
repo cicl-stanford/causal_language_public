@@ -42,7 +42,7 @@ Contains code for model analysis and as well as training, prediction, and cross-
 
 1. `forced_choice_expt_analysis.Rmd` analysis script. Can be knitted to reproduce model predictions.
 
-2. `forced_choice_expt_analysis.md` is a pre-knitted markdown file. 
+2. `forced_choice_expt_analysis.md` is a pre-knitted markdown file. You can view the analysis code [here](https://github.com/cicl-stanford/causal_language_public/blob/master/code/R/causal_language_analysis.md).  
 
 3. `crossv_ordreg.R` is a script to produce model predictions for ordinal regression cross-validation. Requires a command line argument specifying the split number for which to compute regression models. Requires considerable time to compute regressions as well as memory space as regressions are saved to file. We performed ordinal regression cross-validation on Stanford's high performance computing cluster [Sherlock](https://www.sherlock.stanford.edu/).
 
