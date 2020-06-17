@@ -4,3 +4,4 @@ code/python/__pycache__
 code/python/__pycache__/*
 *.pyc
 code/python/__pycache__/
+.Rproj.user

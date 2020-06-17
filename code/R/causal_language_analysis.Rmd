@@ -1,50 +1,15 @@
 ---
-title: "Causal Language Forced-Choice Experiment Analysis"
-author: "Erin Bennett and Ari Beller"
+title: "Causal Language Analysis"
+author: "Erin Bennett, Ari Beller, Tobias Gerstenberg"
 output:
-  html_document:
+  github_document:
     toc: true
 ---
 
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(
-  comment = "",
-  results = "hold",
-  fig.show = "hold"
-  # echo = FALSE
-)
-
-# knitr::opts_chunk$set(comment = "#>",
-#                fig.show = "hold")
-```
-
-# (Install) and load packages
-
-If necessary, uncomment the following lines and run this code block to install packages:
-
-```{r install packages, echo = TRUE}
-# Uncomment the following lines to install required packages
-# install.packages("tidyverse")
-# install.packages("RSQLite")
-# install.packages("lubridate")
-# install.packages("rjson")
-# install.packages("tidyjson")
-# install.packages("jpeg")
-# install.packages("egg") # for geom_custom()
-# install.packages("grid")
-# install.packages("brms")
-# install.packages("Metrics")
-```
-
-To render all output file formats, knit the file by running:
-
-```
-rmarkdown::render('forced_choice_expt_analysis.Rmd', output_format = 'all')
-```
+# Load packages
 
 ```{r load-packages, message=F}
-library("tidyverse")
 library("RSQLite")
 library("lubridate")
 library("rjson")
@@ -54,47 +19,52 @@ library("egg") # for geom_custom()
 library("grid")
 library("brms")
 library("Metrics")
+library("knitr")
+library("tidyverse")
 ```
 
-```{r set-theme}
-theme_set(
-  theme_classic() + 
-    theme(text = element_text(size = 24))
-)
+```{r set-options}
+opts_chunk$set(comment = "#>",
+               fig.show = "hold")
+
+theme_set(theme_classic() + 
+            theme(text = element_text(size = 24)))
+
+options(dplyr.summarise.inform = F)
 ```
 
 # Read in data
 
 Data is stored in `causal_language_public/data/full_database_anonymized.db`.
 
-```{r Read in all data from file}
+```{r read-in-all-data-from-file}
 con = dbConnect(SQLite(), dbname = "../../data/full_database_anonymized.db");
 df_data = dbReadTable(con, "language")
 dbDisconnect(con)
 ```
 
-```{r Filter to this study}
+```{r filter-to-this-study}
 # filter out incompletes 
 df_data = df_data %>%
-  filter(status %in% 3:5) %>%
-  filter(!str_detect(mode, "debug")) %>%
-  filter(codeversion %in% c("forced_choice_2"))
+  filter(status %in% 3:5,
+         !str_detect(mode, "debug"),
+         codeversion %in% c("forced_choice_2"))
 ```
 
 ## Participants
 
-```{r Extract demographics}
+```{r extract-demographics}
 df_demographics = df_data$datastring %>% 
-  spread_values(
-    language = jstring("questiondata", "language"),
-    age = jstring("questiondata", "age"),
-    gender = jstring("questiondata", "gender"),
-    race = jstring("questiondata", "race"),
-    ethnicity = jstring("questiondata", "ethnicity"),
-    feedback = jstring("questiondata", "feedback")
-  ) %>% 
+  spread_values(language = jstring("questiondata", "language"),
+                age = jstring("questiondata", "age"),
+                gender = jstring("questiondata", "gender"),
+                race = jstring("questiondata", "race"),
+                ethnicity = jstring("questiondata", "ethnicity"),
+                feedback = jstring("questiondata", "feedback")) %>% 
   rename(participant = document.id) %>% 
-  mutate(time = difftime(df_data$endhit,df_data$beginhit,units = "mins"))
+  mutate(time = difftime(df_data$endhit,
+                         df_data$beginhit,
+                         units = "mins"))
 ```
 
 Age:
@@ -102,46 +72,40 @@ Age:
 ```{r}
 df_demographics %>%
   mutate(age = as.numeric(age)) %>%
-  summarise(
-    `Median age` = median(age, na.rm = TRUE),
-    `Age standard deviation` = sd(age, na.rm = TRUE)
-  ) %>%
-  knitr::kable()
+  summarise(`Median age` = median(age, na.rm = TRUE),
+            `Age standard deviation` = sd(age, na.rm = TRUE)) %>%
+  kable()
 ```
 
 Gender:
 
-```{r Gender}
+```{r gender}
 df_demographics %>%
-  mutate(
-    gender = str_replace(gender, "^[fF].*", "Female"),
-    gender = str_replace(gender, "^[mM].*", "Male"),
-    gender = str_replace(gender, "^$", NA_character_)
-  ) %>%
+  mutate(gender = str_replace(gender, "^[fF].*", "Female"),
+         gender = str_replace(gender, "^[mM].*", "Male"),
+         gender = str_replace(gender, "^$", NA_character_)) %>%
   count(gender, name = "Count") %>%
   mutate(gender = recode(gender, .missing = "No response")) %>%
-  knitr::kable()
+  kable()
 ```
 
 Language:
 
-```{r Language}
+```{r language}
 df_demographics %>%
-  mutate(
-    language = str_replace(language, "^[eE][nN][gG].*", "English"),
-    language = str_replace(language, "^$", NA_character_)
-  ) %>%
+  mutate(language = str_replace(language, "^[eE][nN][gG].*", "English"),
+         language = str_replace(language, "^$", NA_character_)) %>%
   count(language, name = "Count") %>%
   mutate(language = recode(language, .missing = "No response")) %>%
-  knitr::kable()
+  kable()
 ```
 
 How long did it take participants to do the task?
 
-```{r Time taken}
+```{r time-taken}
 df_demographics %>%
   summarise(`Average time spent on task` = mean(time, na.rm = TRUE)) %>%
-  knitr::kable()
+  kable()
 ```
 
 ## Get participant responses
@@ -164,27 +128,31 @@ df_long = df_data$datastring %>%
   arrange(participant, trial)
 ```
 
-```{r Check for and label participants to exclude}
+```{r check-for-and-label-participants-to-exclude}
 df_long = df_long %>%
   mutate(is_attention_check = trial == 30)
+
 excluded_participants = df_long %>%
   filter(response != "no_difference" & is_attention_check) %>%
   .$participant
+
 df_long_filtered = df_long %>%
   filter(!(participant %in% excluded_participants))
+
 df_long = df_long %>%
   mutate(is_excluded_participant = participant %in% excluded_participants)
+
 num_excluded_participants = length(excluded_participants)
 ```
 
-```{r Filter out excluded participants}
+```{r filter-out-excluded-participants}
 df_long = df_long %>% filter(!is_excluded_participant)
 ```
 
 We excluded `r num_excluded_participants` participants for failing to pass an attention check.
 
 Aggregate participant judgements.
-```{r Create dataframe with responses aggregated over participants}
+```{r create-dataframe-with-responses-aggregated-over-participants}
 df_agg = df_long %>%
   # ignore attention check and instruction video
   filter(trial != 30,
@@ -198,8 +166,7 @@ df_agg = df_long %>%
 df_agg = right_join(
   df_agg,
   expand(df_agg, trial, response),
-  by = c("trial", "response")
-) %>%
+  by = c("trial", "response")) %>%
   group_by(trial) %>%
   ungroup() %>%
   mutate(count = ifelse(is.na(count), 0, count))
@@ -242,6 +209,7 @@ df_model = read.csv("../python/useful_csvs/top_models.csv") %>%
 
 
 Reported models are cc full (combined cause with pragmatics) and normal lesion (no combined cause without pragmatics)
+
 ```{r print-summary-statistics-for-top-models}
 
 df_model_v_data = df_model %>% 
@@ -290,12 +258,8 @@ df_crossval_summary
 
 ### Model Statistics
 
-Code to train regression. Re-training the regressions
-from scratch takes a fair bit of time. So training is
-commented out. Remove comments to retrain. Currently
-Models are saved in regression subfolder. brm will
-reload the models rather than retrain (given the same
-file names). Move them to retrain models.
+Code to train regression. Re-training the regressions from scratch takes a fair bit of time. So training is commented out. Remove comments to retrain. Currently Models are saved in regression subfolder. brm will reload the models rather than retrain (given the same file names). Move them to retrain models.
+
 ```{r train-regressions}
 unoise_range = c(0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6)
 
@@ -343,6 +307,7 @@ df_full_data = df_long %>%
 
 Write aspect-response dataframes to file for later use.
 Will be helpful to avoid recomputation in cross-validation.
+
 ```{r write-training-set-for-each-noise-value-to-file}
 
 for (unoise in unoise_range) {
@@ -371,8 +336,8 @@ for (unoise in unoise_range) {
 
 ```
 
-
 Produce model predictions
+
 ```{r predict-with-regressions}
 unoise_range = c(0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6)
 
@@ -460,12 +425,13 @@ reg_summary
 
 
 ### Cross-Validation
+
 For cross validation of the Bayesian ordinal regression models, we trained ordinal regressions for each noise value on each split. We took the best performing model for each split (assessed on the held out set), and saved the predictions of that model to file in the given split folder. The code for this process is in the crossv_ordreg.R script. We ran the code on Stanford's high-performance computing cluster Sherlock. It takes considerable computing resources to retrain the models from scratch, so we provide the pre-computed best performing models in the splits folder for convenience.
 
 If you would like to reproduce the training, you can run the 
 script from the command line with the following command:
 
-Rscript crossv_ordreg.R split_num
+`Rscript crossv_ordreg.R split_num`
 
 where split_num is an integer from 1-100 designating the
 split to run and assess.
@@ -475,16 +441,16 @@ regressions in cross validation without random intercepts for
 participants.
 
 Load top models and compute summary statistics
+
 ```{r load-top-models-and-compute-summary-stats}
 
 model_list = list()
 
 # Load best models
 for (i in seq(1,100)) {
-  filename = paste("splits/split",
+  filename = str_c("splits/split",
                    str_pad(i, 3, side = "left", pad = "0"),
-                   "_bestmodel.csv",
-                   sep = "")
+                   "_bestmodel.csv")
   
   mod = read.csv(filename) %>% 
     mutate(split = i)
@@ -518,6 +484,7 @@ df_crossv_reg_sum_stat
 ## Enable Comparison
 
 Code to compare enable semantics defined in paper to enable semantics that explicitly includes negated how causation. We report full model not how semantics in the paper as the lesion version does worse.
+
 ```{r load-enable-comparison}
 
 df_enable_comparison = read.csv("../python/useful_csvs/enable_comparison.csv") %>% 
@@ -569,32 +536,25 @@ df_ord_reg = df_best_reg %>%
 
 
 best_models_all = rbind(df_full, df_no_prag, df_ord_reg)
-
-
 ```
 
 Add confidence intervals to datapoints.
 ```{r add-error-bars-to-df-agg}
 
 count_with_ci = function(df, var) {
-  y =
-    df %>%
+  y = df %>%
     group_by(trial, description) %>%
     count({{var}}, name = y, .drop = FALSE)
   resampled_counts =
-    map_dfr(
-      1:100,
-      function(i) {
-        df %>%
-        mutate(response = sample({{var}}, replace = TRUE)) %>%
-        count(response, .drop = FALSE)
-      }
-    ) %>%
+    map_dfr(1:100,
+            function(i) {
+              df %>%
+                mutate(response = sample({{var}}, replace = TRUE)) %>%
+                count(response, .drop = FALSE)
+            }) %>%
     group_by(trial, description, response) %>%
-    summarise(
-      ymin = quantile(n, probs = 0.025),
-      ymax = quantile(n, probs = 0.975)
-    )
+    summarise(ymin = quantile(n, probs = 0.025),
+              ymax = quantile(n, probs = 0.975))
 }
 
 df_actual =
@@ -606,35 +566,28 @@ df_actual =
                                       "cause"))) %>% 
   filter(trial != 30)
 
-df_agg =
-  map_dfr(
-    1:1000,
-    function(i) {
-      df_actual %>%
-        group_by(trial) %>%
-        mutate(response = sample(response, replace = TRUE)) %>%
-        count(response, .drop = FALSE) %>%
-        mutate(n = n / sum(n))
-    }
-  ) %>%
+df_agg = map_dfr(1:1000,
+                 function(i) {
+                   df_actual %>%
+                     group_by(trial) %>%
+                     mutate(response = sample(response, replace = TRUE)) %>%
+                     count(response, .drop = FALSE) %>%
+                     mutate(n = n / sum(n))}) %>%
   group_by(trial, response) %>%
-  summarise(
-    data_ymin = quantile(n, probs = 0.025),
-    data_ymax = quantile(n, probs = 0.975)
-  ) %>%
-  left_join(
-    df_actual %>%
-      group_by(trial) %>%
-      count(response, name = "data_y", .drop = FALSE) %>%
-      mutate(data_y = data_y / sum(data_y)),
-    by = c("trial", "response")
-  ) %>%
+  summarise(data_ymin = quantile(n, probs = 0.025),
+            data_ymax = quantile(n, probs = 0.975)) %>%
+  left_join(df_actual %>%
+              group_by(trial) %>%
+              count(response, name = "data_y", .drop = FALSE) %>%
+              mutate(data_y = data_y / sum(data_y)),
+            by = c("trial", "response")) %>%
   ungroup()
 ```
 
 
 Code for sample cases graphics
-```{r sample cases, fig.width=15, fig.height=6}
+```{r sample-cases, fig.width=20, fig.height=6}
+
 sample_cases = c(12, 18, 2, 22, 6, 7, 14, 15)
 words = c("no_difference", "affect", "enable", "cause")
 labels = c("N", "A", "E", "C")
@@ -708,7 +661,7 @@ ggsave("../../figures/paper_plots/cogsci_bar_model_cases.pdf",
 
 
 Code for scatter plot.
-```{r scatter, fig.width=15, fig.height=5}
+```{r scatter-fig, fig.height=6, fig.width=20}
 
 best_models_all = left_join(best_models_all, df_agg, by = c("trial", "response"))
 
@@ -782,8 +735,7 @@ Aspects:
 df_sample_aspects = df_aspects %>% 
   filter(uncertainty_noise == 1.0)
 
-sample_cases_aspects <-
-  df_sample_aspects %>%
+sample_cases_aspects = df_sample_aspects %>%
   filter(trial %in% sample_cases[1:4]) %>%
   mutate(trial = factor(trial, levels = sample_cases[1:4])) %>%
   group_by(trial, how, whether, sufficient) %>%
@@ -793,55 +745,51 @@ sample_cases_aspects <-
   select(trial, clip, whether, how, sufficient)
 
 sample_cases_aspects %>%
-  knitr::kable()
+  kable()
 ```
 
 Semantics:
 
 ```{r}
-how_param <- 0.2
-sample_cases_semantics <-
-  sample_cases_aspects %>%
-  transmute(
-    trial,
-    clip,
-    enable = whether + sufficient - whether*sufficient,
-    cause = how*(enable),
-    affect = how,
-    whether_or_suff = enable,
-    how_and_flip = how * how_param,
-    something_true_how_soft = whether_or_suff + how_and_flip - whether_or_suff*how_and_flip,
-    no_diff = 1 - (something_true_how_soft)
-  ) %>%
+how_param = 0.2
+sample_cases_semantics = sample_cases_aspects %>%
+  transmute(trial,
+            clip,
+            enable = whether + sufficient - whether*sufficient,
+            cause = how*(enable),
+            affect = how,
+            whether_or_suff = enable,
+            how_and_flip = how * how_param,
+            something_true_how_soft = whether_or_suff + how_and_flip - whether_or_suff*how_and_flip,
+            no_diff = 1 - (something_true_how_soft)) %>%
   select(trial, clip, cause, enable, affect, no_diff)
+
 sample_cases_semantics %>%
-  knitr::kable()
+  kable()
 ```
 
 Literal listener:
 
 ```{r}
-sample_cases_l0 <-
-  sample_cases_semantics %>%
+sample_cases_l0 = sample_cases_semantics %>%
   mutate_at(vars(cause, enable, affect, no_diff), ~ . / sum(.))
+
 sample_cases_l0 %>%
-  knitr::kable()
+  kable()
 ```
 
 Speaker:
 
 ```{r}
-sample_cases_s1 <-
-  sample_cases_l0 %>%
-  mutate(
-    z = cause + enable + affect + no_diff,
-    cause = cause / z,
-    enable = enable / z,
-    affect = affect / z,
-    no_diff = no_diff / z
-)
+sample_cases_s1 = sample_cases_l0 %>%
+  mutate(z = cause + enable + affect + no_diff,
+         cause = cause / z,
+         enable = enable / z,
+         affect = affect / z,
+         no_diff = no_diff / z)
+
 sample_cases_s1 %>%
   select(-z) %>%
-  knitr::kable()
+  kable()
 
 ```
