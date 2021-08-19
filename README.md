@@ -111,7 +111,7 @@ conda:
 pip:
 
 * pygame==2.0.0.dev6
-* pymunk
+* pymunk==5.7.0
 
 2. Compute aspect representation. This runs the whether, how, sufficiency, and moving tests accross samples of counterfactual simulations. Output will be saved to `code/python/aspects/`. Note that the generated aspects from the paper are already included in this repo in `code/python/aspects_paper`. Downstream model components read from `aspects_paper`, but paths can be modified. 
 
