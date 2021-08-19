@@ -799,3 +799,79 @@ sample_cases_s1 %>%
 ```{r, echo=F}
 sessionInfo()
 ```
+
+# All clips
+
+```{r}
+sample_cases = 0:29
+words = c("no_difference", "affect", "enable", "cause")
+labels = c("N", "A", "E", "C")
+df.plot = df_agg %>%
+  filter(trial %in% sample_cases) %>%
+  mutate(trial = factor(trial, levels = sample_cases),
+         Clip = factor(trial, labels = sample_cases),
+         response = factor(response,
+                           levels = words,
+                           labels = labels))
+df.model = best_models_all %>% 
+  filter(trial %in% sample_cases) %>%
+  mutate(Model = model_label_short,
+         trial = factor(trial, levels = sample_cases),
+         Clip = factor(trial, labels = sample_cases),
+         response = factor(response,
+                           levels = words,
+                           labels = labels))
+func_load_image = function(clip){
+  readJPEG(str_c("../../figures/trial_schematics/trial", clip, ".jpeg"))
+}
+df.clips = df.plot %>% 
+  distinct(trial, Clip) %>% 
+  arrange(Clip) %>% 
+  mutate(grob = map(.x = trial, .f = ~ func_load_image(clip = .x)))
+p = ggplot(data = df.plot,
+           mapping = aes(x = response, y = data_y)) +
+  geom_bar(stat = "identity",
+           fill = "lightgray",
+           color = "black") +
+  geom_point(data = df.model,
+             mapping = aes(x = response,
+                           y = model_y,
+                           shape = Model,
+                           fill = Model),
+             size = 3,
+             position = position_dodge(0.8),
+             color = "black") +
+  geom_errorbar(
+    mapping = aes(ymin = data_ymin, ymax = data_ymax),
+    width = 0
+  ) +
+  geom_custom(data = df.clips,
+              mapping = aes(data = grob, x = 2.5, y = Inf),
+              grob_fun = function(x) rasterGrob(x,
+                                                interpolate = T,
+                                                vjust = -0.3)) +
+  facet_wrap(~Clip,
+             ncol = 10,
+             labeller = "label_both") +
+  scale_fill_brewer(type = "qual", palette = 6, name = "") +
+  scale_shape_manual(name = "",
+                     values = 21:23) + 
+  labs(y = "Proportion of\nResponses",
+       caption = "N: no difference, A: affected, E: enabled, C: caused") +
+  coord_cartesian(clip = "off") + 
+  theme(legend.text.align = 0,
+        panel.grid = element_blank(),
+        legend.position = "bottom",
+        axis.title.x = element_blank(),
+        legend.text = element_text(size = 24),
+        plot.caption = element_text(size = 20, color = "gray20"),
+        panel.spacing.y = unit(6, "cm"),
+        plot.margin = margin(t = 6, l = 0.2, r = 0.2, b = 0.1, unit = "cm")) +
+  guides(fill = guide_legend(override.aes = list(size = 6)))
+p
+
+ggsave(str_c("../../figures/trial_plots/bar_model_cases_all.pdf"),
+       width = 24,
+       height = 16)
+```
+
